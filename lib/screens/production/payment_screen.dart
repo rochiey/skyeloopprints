@@ -29,14 +29,15 @@ class PaymentScreen extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(30),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: AspectRatio(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(30),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AspectRatio(
                         aspectRatio: 1,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
@@ -61,28 +62,28 @@ class PaymentScreen extends StatelessWidget {
                                 ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 22),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(color: SkyeColors.mist, borderRadius: BorderRadius.circular(16)),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline, color: SkyeColors.blue),
-                          SizedBox(width: 10),
-                          Expanded(child: Text('Payment can take a moment to appear at the cashier. This button does not verify payment.')),
-                        ],
+                      const SizedBox(height: 22),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: SkyeColors.mist, borderRadius: BorderRadius.circular(16)),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, color: SkyeColors.blue),
+                            SizedBox(width: 10),
+                            Expanded(child: Text('Payment can take a moment to appear at the cashier. This button does not verify payment.')),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 22),
-                    FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()),
+                      const SizedBox(height: 22),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()),
+                        ),
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('Done — I have paid'),
                       ),
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Done — I have paid'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

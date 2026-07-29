@@ -56,59 +56,62 @@ class _DigitalCopyScreenState extends State<DigitalCopyScreen> {
       canPop: false,
       child: KioskShell(
         child: Center(
-          child: ConstrainedBox(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 620),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(36),
-                child: _loading
-                    ? const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 20),
-                          Text('Preparing your digital copy…'),
-                        ],
-                      )
-                    : _share == null
-                        ? _NoNetwork(onRetry: _startServer, onDone: _done)
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('Take it with you', style: Theme.of(context).textTheme.headlineMedium),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Connect your phone to the same SkyeLoop or café Wi‑Fi, then scan this code.',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 22),
-                              Container(
-                                padding: const EdgeInsets.all(18),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(color: SkyeColors.blue, width: 3),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(36),
+                  child: _loading
+                      ? const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 20),
+                            Text('Preparing your digital copy…'),
+                          ],
+                        )
+                      : _share == null
+                          ? _NoNetwork(onRetry: _startServer, onDone: _done)
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Take it with you', style: Theme.of(context).textTheme.headlineMedium),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Connect your phone to the same SkyeLoop or café Wi‑Fi, then scan this code.',
+                                  textAlign: TextAlign.center,
                                 ),
-                                child: QrImageView(
-                                  data: _share!.url,
-                                  version: QrVersions.auto,
-                                  size: 285,
-                                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: SkyeColors.blue),
-                                  dataModuleStyle: const QrDataModuleStyle(
-                                      dataModuleShape: QrDataModuleShape.square, color: SkyeColors.ink),
+                                const SizedBox(height: 22),
+                                Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: SkyeColors.blue, width: 3),
+                                  ),
+                                  child: QrImageView(
+                                    data: _share!.url,
+                                    version: QrVersions.auto,
+                                    size: 285,
+                                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: SkyeColors.blue),
+                                    dataModuleStyle: const QrDataModuleStyle(
+                                        dataModuleShape: QrDataModuleShape.square, color: SkyeColors.ink),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 14),
-                              Text(_share!.url, textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12, color: SkyeColors.blue)),
-                              const SizedBox(height: 12),
-                              const Text('The photo stays available until Done is tapped. No internet or cloud is used.',
-                                  textAlign: TextAlign.center),
-                              const SizedBox(height: 24),
-                              FilledButton.icon(onPressed: _done,
-                                  icon: const Icon(Icons.done_all), label: const Text('Done')),
-                            ],
-                          ),
+                                const SizedBox(height: 14),
+                                Text(_share!.url, textAlign: TextAlign.center,
+                                    style: const TextStyle(fontSize: 12, color: SkyeColors.blue)),
+                                const SizedBox(height: 12),
+                                const Text('The photo stays available until Done is tapped. No internet or cloud is used.',
+                                    textAlign: TextAlign.center),
+                                const SizedBox(height: 24),
+                                FilledButton.icon(onPressed: _done,
+                                    icon: const Icon(Icons.done_all), label: const Text('Done')),
+                              ],
+                            ),
+                ),
               ),
             ),
           ),

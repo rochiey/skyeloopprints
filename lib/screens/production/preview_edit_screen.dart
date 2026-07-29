@@ -227,56 +227,113 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 470),
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 10))],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final portrait = constraints.maxWidth < 700;
+            if (portrait) {
+              return SingleChildScrollView(
+                child: Column(
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 470, maxHeight: 600),
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 10))],
+                          ),
+                          child: RepaintBoundary(
+                            key: _compositionKey,
+                            child: PhotoComposition(session: session, onChanged: () => setState(() {})),
+                          ),
+                        ),
+                      ),
                     ),
-                    child: RepaintBoundary(
-                      key: _compositionKey,
-                      child: PhotoComposition(session: session, onChanged: () => setState(() {})),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          FilledButton.tonalIcon(onPressed: _addText,
+                              icon: const Icon(Icons.text_fields), label: const Text('Add text')),
+                          FilledButton.tonalIcon(onPressed: _addSticker,
+                              icon: const Icon(Icons.emoji_emotions_outlined), label: const Text('Add sticker')),
+                          OutlinedButton.icon(
+                            onPressed: session.editorItems.isEmpty
+                                ? null
+                                : () => setState(() => session.editorItems.removeLast()),
+                            icon: const Icon(Icons.undo),
+                            label: const Text('Undo last'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Card(
+                      color: SkyeColors.mist,
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('Tip: use one finger to move an item and two fingers to resize it.'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Row(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 470),
+                      child: DecoratedBox(
+                        decoration: const BoxDecoration(
+                          boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 10))],
+                        ),
+                        child: RepaintBoundary(
+                          key: _compositionKey,
+                          child: PhotoComposition(session: session, onChanged: () => setState(() {})),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 24),
-            SizedBox(
-              width: 210,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FilledButton.tonalIcon(onPressed: _addText,
-                      icon: const Icon(Icons.text_fields), label: const Text('Add text')),
-                  const SizedBox(height: 12),
-                  FilledButton.tonalIcon(onPressed: _addSticker,
-                      icon: const Icon(Icons.emoji_emotions_outlined), label: const Text('Add sticker')),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: session.editorItems.isEmpty
-                        ? null
-                        : () => setState(() => session.editorItems.removeLast()),
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Undo last'),
+                const SizedBox(width: 24),
+                SizedBox(
+                  width: 210,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton.tonalIcon(onPressed: _addText,
+                          icon: const Icon(Icons.text_fields), label: const Text('Add text')),
+                      const SizedBox(height: 12),
+                      FilledButton.tonalIcon(onPressed: _addSticker,
+                          icon: const Icon(Icons.emoji_emotions_outlined), label: const Text('Add sticker')),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: session.editorItems.isEmpty
+                            ? null
+                            : () => setState(() => session.editorItems.removeLast()),
+                        icon: const Icon(Icons.undo),
+                        label: const Text('Undo last'),
+                      ),
+                      const SizedBox(height: 20),
+                      const Card(
+                        color: SkyeColors.mist,
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Tip: use one finger to move an item and two fingers to resize it.'),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                  const Card(
-                    color: SkyeColors.mist,
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Tip: use one finger to move an item and two fingers to resize it.'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

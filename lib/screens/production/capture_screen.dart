@@ -192,88 +192,181 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                   icon: const Icon(Icons.refresh), label: const Text('Retake all')),
           ],
         ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 4,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 3 / 4,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(30),
-                    child: ColoredBox(
-                      color: SkyeColors.ink,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (_camera?.value.isInitialized ?? false)
-                            CameraPreview(_camera!)
-                          else
-                            _CameraUnavailable(
-                              loading: _initializing,
-                              message: _cameraError,
-                              onRetry: _initializeCamera,
-                              onMock: _capturing ? null : _addMockPhoto,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final portrait = constraints.maxWidth < 600;
+            if (portrait) {
+              return Column(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: 3 / 4,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(30),
+                          child: ColoredBox(
+                            color: SkyeColors.ink,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (_camera?.value.isInitialized ?? false)
+                                  CameraPreview(_camera!)
+                                else
+                                  _CameraUnavailable(
+                                    loading: _initializing,
+                                    message: _cameraError,
+                                    onRetry: _initializeCamera,
+                                    onMock: _capturing ? null : _addMockPhoto,
+                                  ),
+                                if (_countdown != null)
+                                  ColoredBox(
+                                    color: const Color(0x44000000),
+                                    child: Center(
+                                      child: Text('$_countdown',
+                                          style: const TextStyle(color: Colors.white, fontSize: 100,
+                                              fontWeight: FontWeight.w900)),
+                                    ),
+                                  ),
+                                if (!_initializing && _cameraError == null && _countdown == null)
+                                  Positioned(
+                                    bottom: 24,
+                                    left: 0,
+                                    right: 0,
+                                    child: Center(
+                                      child: FloatingActionButton.large(
+                                        heroTag: 'shutter',
+                                        backgroundColor: Colors.white,
+                                        onPressed: _capturing ? null : _takeNextPhoto,
+                                        child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          if (_countdown != null)
-                            ColoredBox(
-                              color: const Color(0x44000000),
-                              child: Center(
-                                child: Text('$_countdown',
-                                    style: const TextStyle(color: Colors.white, fontSize: 150,
-                                        fontWeight: FontWeight.w900)),
-                              ),
-                            ),
-                          if (!_initializing && _cameraError == null && _countdown == null)
-                            Positioned(
-                              bottom: 24,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: FloatingActionButton.large(
-                                  heroTag: 'shutter',
-                                  backgroundColor: Colors.white,
-                                  onPressed: _capturing ? null : _takeNextPhoto,
-                                  child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 80,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var index = 0; index < session.tier.shotCount; index++)
+                          Padding(
+                            padding: EdgeInsets.only(right: index != session.tier.shotCount - 1 ? 10 : 0),
+                            child: AspectRatio(
+                              aspectRatio: 4 / 3,
+                              child: Container(
+                                width: 100,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: .65),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: index < session.photoPaths.length
+                                      ? SkyeColors.blue : Colors.white, width: 3),
                                 ),
+                                clipBehavior: Clip.antiAlias,
+                                child: index < session.photoPaths.length
+                                    ? Image.file(File(session.photoPaths[index]), fit: BoxFit.cover)
+                                    : Center(child: Text('${index + 1}',
+                                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800,
+                                            color: SkyeColors.ink))),
                               ),
                             ),
-                        ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: 3 / 4,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(30),
+                        child: ColoredBox(
+                          color: SkyeColors.ink,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (_camera?.value.isInitialized ?? false)
+                                CameraPreview(_camera!)
+                              else
+                                _CameraUnavailable(
+                                  loading: _initializing,
+                                  message: _cameraError,
+                                  onRetry: _initializeCamera,
+                                  onMock: _capturing ? null : _addMockPhoto,
+                                ),
+                              if (_countdown != null)
+                                ColoredBox(
+                                  color: const Color(0x44000000),
+                                  child: Center(
+                                    child: Text('$_countdown',
+                                        style: const TextStyle(color: Colors.white, fontSize: 150,
+                                            fontWeight: FontWeight.w900)),
+                                  ),
+                                ),
+                              if (!_initializing && _cameraError == null && _countdown == null)
+                                Positioned(
+                                  bottom: 24,
+                                  left: 0,
+                                  right: 0,
+                                  child: Center(
+                                    child: FloatingActionButton.large(
+                                      heroTag: 'shutter',
+                                      backgroundColor: Colors.white,
+                                      onPressed: _capturing ? null : _takeNextPhoto,
+                                      child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 22),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var index = 0; index < session.tier.shotCount; index++) ...[
-                    AspectRatio(
-                      aspectRatio: 4 / 3,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .65),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: index < session.photoPaths.length
-                              ? SkyeColors.blue : Colors.white, width: 3),
+                const SizedBox(width: 22),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var index = 0; index < session.tier.shotCount; index++) ...[
+                        AspectRatio(
+                          aspectRatio: 4 / 3,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .65),
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(color: index < session.photoPaths.length
+                                  ? SkyeColors.blue : Colors.white, width: 3),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: index < session.photoPaths.length
+                                ? Image.file(File(session.photoPaths[index]), fit: BoxFit.cover)
+                                : Center(child: Text('${index + 1}',
+                                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800,
+                                        color: SkyeColors.ink))),
+                          ),
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: index < session.photoPaths.length
-                            ? Image.file(File(session.photoPaths[index]), fit: BoxFit.cover)
-                            : Center(child: Text('${index + 1}',
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800,
-                                    color: SkyeColors.ink))),
-                      ),
-                    ),
-                    if (index != session.tier.shotCount - 1) const SizedBox(height: 10),
-                  ],
-                ],
-              ),
-            ),
-          ],
+                        if (index != session.tier.shotCount - 1) const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

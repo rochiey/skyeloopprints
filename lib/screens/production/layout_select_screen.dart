@@ -25,12 +25,17 @@ class LayoutSelectScreen extends StatelessWidget {
           builder: (context, constraints) {
             final horizontal = constraints.maxWidth >= 760;
             final cards = PricingTier.values
-                .map((tier) => Expanded(child: _TierCard(tier: tier)))
+                .map((tier) => horizontal
+                    ? Expanded(child: _TierCard(tier: tier))
+                    : _TierCard(tier: tier))
                 .toList();
             return Center(
               child: horizontal
                   ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(cards))
-                  : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(cards)),
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(cards)),
+                    ),
             );
           },
         ),
