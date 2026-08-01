@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/admin_config.dart';
 import '../models/pricing_tier.dart';
+import '../models/upload_config.dart';
 
 class AdminConfigService {
   static const _venueKey = 'venue_name';
@@ -18,6 +19,7 @@ class AdminConfigService {
   static const _passwordHashKey = 'admin_password_hash';
   static const _printerAddressKey = 'printer_address';
   static const _printerNameKey = 'printer_name';
+  static const _uploadConfigKey = 'upload_config';
 
   late SharedPreferences _preferences;
 
@@ -93,6 +95,20 @@ class AdminConfigService {
     final passwordHash = _derivePasswordHash(password, salt);
     await _preferences.setString(_passwordSaltKey, encodedSalt);
     await _preferences.setString(_passwordHashKey, passwordHash);
+  }
+
+  UploadConfig loadUploadConfig() {
+    final raw = _preferences.getString(_uploadConfigKey);
+    if (raw == null) return const UploadConfig();
+    try {
+      return UploadConfig.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return const UploadConfig();
+    }
+  }
+
+  Future<void> saveUploadConfig(UploadConfig config) async {
+    await _preferences.setString(_uploadConfigKey, jsonEncode(config.toJson()));
   }
 
   bool verifyPassword(String password) {

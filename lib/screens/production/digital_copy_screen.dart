@@ -42,6 +42,10 @@ class _DigitalCopyScreenState extends State<DigitalCopyScreen> {
 
   Future<void> _done() async {
     final app = AppScope.of(context, listen: false);
+    final session = app.session;
+    if (session != null) {
+      await app.recordCompletedSession(session);
+    }
     await app.clearSession();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(

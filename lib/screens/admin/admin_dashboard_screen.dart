@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../app.dart';
 import '../../models/pricing_tier.dart';
+import '../../models/upload_config.dart';
 import '../../services/printer_service.dart';
 import '../../theme/skyeloop_theme.dart';
 import '../../widgets/brand_mark.dart';
@@ -20,18 +21,41 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late final TextEditingController _venueController;
+  late final TextEditingController _uploadUrlController;
+  late final TextEditingController _uploadTokenController;
+  UploadConfig _uploadConfig = const UploadConfig();
   bool _busy = false;
+  bool _uploadingNow = false;
+  String _uploadStatus = '';
 
   @override
   void initState() {
     super.initState();
     final app = AppScope.of(context, listen: false);
     _venueController = TextEditingController(text: app.config.venueName);
+    _uploadConfig = app.configService.loadUploadConfig();
+    _uploadUrlController = TextEditingController(text: _uploadConfig.apiBaseUrl);
+    _uploadTokenController = TextEditingController(text: _uploadConfig.apiToken);
+    _uploadStatus = app.uploadSchedulerService!.lastStatus;
+    app.uploadSchedulerService!.addListener(_onSchedulerUpdate);
+  }
+
+  void _onSchedulerUpdate() {
+    if (mounted) {
+      final app = AppScope.of(context, listen: false);
+      setState(() {
+        _uploadStatus = app.uploadSchedulerService!.lastStatus;
+      });
+    }
   }
 
   @override
   void dispose() {
     _venueController.dispose();
+    _uploadUrlController.dispose();
+    _uploadTokenController.dispose();
+    AppScope.of(context, listen: false)
+        .uploadSchedulerService!.removeListener(_onSchedulerUpdate);
     super.dispose();
   }
 
@@ -138,6 +162,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (result == null || !mounted) return;
     await AppScope.of(context, listen: false).configService.setPassword(result);
     _message('Password changed.');
+  }
+
+  Future<void> _saveUploadConfig() async {
+    final app = AppScope.of(context, listen: false);
+    final config = _uploadConfig.copyWith(
+      apiBaseUrl: _uploadUrlController.text.trim(),
+      apiToken: _uploadTokenController.text.trim(),
+    );
+    await app.configService.saveUploadConfig(config);
+    _uploadConfig = config;
+    app.uploadSchedulerService!.onConfigChanged(config);
+    _message('Upload settings saved.');
+  }
+
+  Future<void> _pickUploadTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: _uploadConfig.scheduledHour,
+        minute: _uploadConfig.scheduledMinute,
+      ),
+      helpText: 'Select daily upload time',
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _uploadConfig = _uploadConfig.copyWith(
+        scheduledHour: time.hour,
+        scheduledMinute: time.minute,
+      );
+    });
+    await _saveUploadConfig();
+  }
+
+  Future<void> _triggerManualUpload() async {
+    final app = AppScope.of(context, listen: false);
+    setState(() => _uploadingNow = true);
+    await app.uploadSchedulerService!.triggerManualUpload();
+    if (mounted) {
+      setState(() {
+        _uploadingNow = false;
+        _uploadStatus = app.uploadSchedulerService!.lastStatus;
+      });
+    }
   }
 
   Future<void> _exitAdmin() async {
@@ -280,6 +347,105 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     title: const Text('Admin password', style: TextStyle(fontWeight: FontWeight.w800)),
                     subtitle: const Text('Stored as a salted hash on this tablet.'),
                     trailing: OutlinedButton(onPressed: _changePassword, child: const Text('Change password')),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text('Auto sales upload', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 6),
+                const Text('Sends completed session data to your server daily. Only uploads over Wi‑Fi.'),
+                const SizedBox(height: 14),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text('Enable auto-upload',
+                                  style: Theme.of(context).textTheme.titleMedium),
+                            ),
+                            Switch(
+                              value: _uploadConfig.autoUploadEnabled,
+                              onChanged: (value) {
+                                setState(() {
+                                  _uploadConfig = _uploadConfig.copyWith(
+                                      autoUploadEnabled: value);
+                                });
+                                _saveUploadConfig();
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _uploadUrlController,
+                          decoration: const InputDecoration(
+                            labelText: 'API base URL',
+                            hintText: 'https://your-server.com',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.link),
+                          ),
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _uploadTokenController,
+                          decoration: const InputDecoration(
+                            labelText: 'API auth token (optional)',
+                            hintText: 'Bearer token',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.key),
+                          ),
+                          obscureText: true,
+                          autocorrect: false,
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _pickUploadTime,
+                              icon: const Icon(Icons.schedule),
+                              label: Text('Schedule: ${_uploadConfig.scheduledTimeLabel}'),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.tonalIcon(
+                              onPressed: _busy ? null : _saveUploadConfig,
+                              icon: const Icon(Icons.save_outlined),
+                              label: const Text('Save settings'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _uploadStatus.isNotEmpty ? _uploadStatus : 'No uploads yet today.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: SkyeColors.ink.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.tonalIcon(
+                              onPressed: (_busy || _uploadingNow) ? null : _triggerManualUpload,
+                              icon: _uploadingNow
+                                  ? const SizedBox(
+                                      width: 18, height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.cloud_upload_outlined),
+                              label: Text(_uploadingNow ? 'Uploading…' : 'Upload now'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
