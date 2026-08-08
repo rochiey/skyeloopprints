@@ -22,7 +22,7 @@ class PhotoComposition extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final date = session.startedAt;
-    final dateLabel = '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+    final dateLabel = '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${(date.year % 100).toString().padLeft(2, '0')}';
     return AspectRatio(
       aspectRatio: .78,
       child: Container(
@@ -40,9 +40,9 @@ class PhotoComposition extends StatelessWidget {
                 Positioned(
                   bottom: constraints.maxHeight * .055,
                   left: 8,
-                  child: Text(
-                    dateLabel,
-                    style: const TextStyle(
+                  child: const Text(
+                    'SkyeLoop',
+                    style: TextStyle(
                       color: SkyeColors.ink,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -53,9 +53,9 @@ class PhotoComposition extends StatelessWidget {
                 Positioned(
                   bottom: constraints.maxHeight * .045,
                   right: 8,
-                  child: const Text(
-                    'SKYELOOP',
-                    style: TextStyle(
+                  child: Text(
+                    dateLabel,
+                    style: const TextStyle(
                       color: SkyeColors.blue,
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
