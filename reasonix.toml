@@ -1,4 +1,4 @@
 [permissions]
-allow = ["explore"]
+allow = ["explore", "research"]
 [sandbox]
 bash = "off"

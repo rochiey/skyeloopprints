@@ -11,72 +11,188 @@ class PhotoComposition extends StatelessWidget {
   const PhotoComposition({
     required this.session,
     required this.onChanged,
+    this.venueName = 'Skye Loop Vendo',
     this.interactive = true,
     super.key,
   });
 
   final PhotoSession session;
   final VoidCallback onChanged;
+
+  /// The cafe / venue name shown as the header above the photo.
+  final String venueName;
   final bool interactive;
+
+  /// The composition is always laid out at print size (576 px wide = the
+  /// printer's 576-dot line), and the preview scales it down with a FittedBox.
+  static const double _printWidth = 576;
+  static const double _standardHeight = 935; // single/grid: portrait photo area
+  static const double _stripHeight = 1515; // 3 photos stacked at 4:3
+
+  /// Fixed header band: room for the cafe name at ~10 mm (2 lines of 80 px).
+  static const double _headerBand = 200;
+  /// Fixed footer band holding the brand + date.
+  static const double _footerBand = 56;
+
+  static const TextStyle _headerStyle = TextStyle(
+    fontFamily: 'Poppins',
+    color: SkyeColors.ink,
+    fontSize: 80,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 2,
+    height: 1.05,
+  );
+  static const TextStyle _footerStyle = TextStyle(
+    fontFamily: 'Poppins',
+    color: SkyeColors.ink,
+    fontSize: 24,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 1.5,
+  );
+  static const TextStyle _dateStyle = TextStyle(
+    fontFamily: 'Poppins',
+    color: SkyeColors.blue,
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 2.5,
+  );
 
   @override
   Widget build(BuildContext context) {
     final date = session.startedAt;
     final dateLabel = '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${(date.year % 100).toString().padLeft(2, '0')}';
-    return AspectRatio(
-      aspectRatio: .78,
-      child: Container(
-        color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Stack(
-              clipBehavior: Clip.none,
+    return session.tier.layout == LayoutType.strip
+        ? _buildStrip(context, dateLabel)
+        : _buildStandard(context, dateLabel);
+  }
+
+  Widget _buildStandard(BuildContext context, String dateLabel) {
+    return Container(
+      width: _printWidth,
+      height: _standardHeight,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: _headerBand,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  venueName.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _headerStyle,
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            top: _headerBand,
+            bottom: _footerBand,
+            child: _PhotoGrid(session: session),
+          ),
+          Positioned(
+            bottom: 14,
+            left: 8,
+            child: const Text('SkyeLoop', style: _footerStyle),
+          ),
+          Positioned(
+            bottom: 14,
+            right: 8,
+            child: Text(
+              dateLabel,
+              style: _dateStyle,
+            ),
+          ),
+          for (final item in session.editorItems)
+            Positioned(
+              left: item.offset.dx,
+              top: item.offset.dy,
+              child: _EditableOverlay(
+                item: item,
+                enabled: interactive,
+                onChanged: onChanged,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Three-photo strip: cafe name, then 3 landscape 4:3 photos stacked
+  /// vertically, then the footer.
+  Widget _buildStrip(BuildContext context, String dateLabel) {
+    return Container(
+      width: _printWidth,
+      height: _stripHeight,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Positioned.fill(
-                  bottom: constraints.maxHeight * .17,
-                  child: _PhotoGrid(session: session),
-                ),
-                Positioned(
-                  bottom: constraints.maxHeight * .055,
-                  left: 8,
-                  child: const Text(
-                    'SkyeLoop',
-                    style: TextStyle(
-                      color: SkyeColors.ink,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.6,
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: _headerBand,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        venueName.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: _headerStyle,
+                      ),
                     ),
                   ),
                 ),
-                Positioned(
-                  bottom: constraints.maxHeight * .045,
-                  right: 8,
-                  child: Text(
-                    dateLabel,
-                    style: const TextStyle(
-                      color: SkyeColors.blue,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2.5,
-                    ),
+                const SizedBox(height: 12),
+                for (var index = 0; index < session.photoPaths.length; index++) ...[
+                  AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: _PhotoCell(path: session.photoPaths[index]),
+                  ),
+                  if (index != session.photoPaths.length - 1) const SizedBox(height: 8),
+                ],
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('SkyeLoop', style: _footerStyle),
+                      Text(
+                        dateLabel,
+                        style: _dateStyle,
+                      ),
+                    ],
                   ),
                 ),
-                for (final item in session.editorItems)
-                  Positioned(
-                    left: item.offset.dx,
-                    top: item.offset.dy,
-                    child: _EditableOverlay(
-                      item: item,
-                      enabled: interactive,
-                      onChanged: onChanged,
-                    ),
-                  ),
               ],
-            );
-          },
-        ),
+            ),
+          ),
+          for (final item in session.editorItems)
+            Positioned(
+              left: item.offset.dx,
+              top: item.offset.dy,
+              child: _EditableOverlay(
+                item: item,
+                enabled: interactive,
+                onChanged: onChanged,
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -195,7 +195,8 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = AppScope.of(context).session!;
+    final app = AppScope.of(context);
+    final session = app.session!;
     return PopScope(
       canPop: false,
       child: KioskShell(
@@ -241,9 +242,16 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                           decoration: const BoxDecoration(
                             boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 10))],
                           ),
-                          child: RepaintBoundary(
-                            key: _compositionKey,
-                            child: PhotoComposition(session: session, onChanged: () => setState(() {})),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: RepaintBoundary(
+                              key: _compositionKey,
+                              child: PhotoComposition(
+                                session: session,
+                                venueName: app.config.venueName,
+                                onChanged: () => setState(() {}),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -292,9 +300,16 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                         decoration: const BoxDecoration(
                           boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 22, offset: Offset(0, 10))],
                         ),
-                        child: RepaintBoundary(
-                          key: _compositionKey,
-                          child: PhotoComposition(session: session, onChanged: () => setState(() {})),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: RepaintBoundary(
+                            key: _compositionKey,
+                            child: PhotoComposition(
+                              session: session,
+                              venueName: app.config.venueName,
+                              onChanged: () => setState(() {}),
+                            ),
+                          ),
                         ),
                       ),
                     ),

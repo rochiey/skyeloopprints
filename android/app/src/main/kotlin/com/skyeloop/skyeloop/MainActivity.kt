@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothSocket
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -26,6 +27,11 @@ class MainActivity : FlutterActivity() {
     private val channelName = "com.skyeloop.kiosk/hardware"
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Long-lived Bluetooth socket, kept open across prints (see [getPrinterSocket]). */
+    @Volatile
+    private var printerSocketInstance: BluetoothSocket? = null
+    private var printerSocketAddress: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,29 +120,118 @@ class MainActivity : FlutterActivity() {
 
     @Suppress("MissingPermission")
     private fun sendToPrinter(address: String, rasterBytes: ByteArray, copies: Int) {
+        val socket = getPrinterSocket(address)
+        try {
+            val output = socket.outputStream
+            repeat(copies) {
+                output.write(byteArrayOf(0x1B, 0x40)) // ESC @: reset parser + buffer
+                writePaced(output, rasterBytes)
+                output.write(byteArrayOf(0x0A, 0x0A, 0x0A)) // small gap between strips
+                output.flush()
+                Thread.sleep(350)
+            }
+            // Feed a tail buffer so the complete strip clears the tear bar before
+            // the paper is cut. GS v 0 is the feed command this printer demonstrably
+            // honors (it drives the images) and advances exactly one dot row per
+            // raster row; blank bytes print nothing. ESC J is avoided because this
+            // printer prints its raw bytes as text instead of feeding.
+            writeTailFeed(output)
+            output.flush()
+            // Give the printer time to physically consume every byte before the
+            // next job starts. If the link is torn down mid-stream, the printer is
+            // left waiting for raster data and the next job's bytes get eaten as
+            // image data, which prints as garbage until the paper runs out.
+            Thread.sleep(1500)
+        } catch (error: Exception) {
+            dropPrinterSocket(socket)
+            throw error
+        }
+    }
+
+    /**
+     * Returns a long-lived socket to the printer, connecting on first use and
+     * reusing it for every print. Reconnecting for each print is unreliable on
+     * this hardware: a torn-down link leaves buffered bytes / a half-open session
+     * in the printer, and the next job's command stream desyncs — the printer then
+     * prints raw bytes as text until the spool runs out. Keeping one connection
+     * for the whole kiosk session avoids that entirely.
+     */
+    @Synchronized
+    @Suppress("MissingPermission")
+    private fun getPrinterSocket(address: String): BluetoothSocket {
+        val held = printerSocketInstance
+        if (held != null && held.isConnected && printerSocketAddress == address) {
+            return held
+        }
+        closePrinterSocket(held)
         val manager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val adapter = manager.adapter ?: throw IllegalStateException("Bluetooth is not available on this tablet.")
         if (!adapter.isEnabled) throw IllegalStateException("Turn on Bluetooth and try again.")
         val device = adapter.getRemoteDevice(address)
         adapter.cancelDiscovery()
         val socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-        try {
-            socket.connect()
-            val output = socket.outputStream
-            repeat(copies) {
-                output.write(byteArrayOf(0x1B, 0x40)) // ESC @: initialize
-                output.write(rasterBytes)
-                output.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A, 0x0A))
-                output.flush()
-                Thread.sleep(350)
-            }
-        } finally {
-            runCatching { socket.close() }
+        socket.connect()
+        // Let the printer's firmware finish bringing the link up before data flows.
+        Thread.sleep(300)
+        printerSocketInstance = socket
+        printerSocketAddress = address
+        return socket
+    }
+
+    @Synchronized
+    private fun closePrinterSocket(socket: BluetoothSocket?) {
+        if (socket == null) return
+        runCatching { socket.close() }
+        if (printerSocketInstance === socket) {
+            printerSocketInstance = null
+            printerSocketAddress = null
+        }
+    }
+
+    private fun dropPrinterSocket(socket: BluetoothSocket) {
+        if (printerSocketInstance === socket) closePrinterSocket(socket)
+    }
+
+    /**
+     * Writes [bytes] in small chunks with a short pause between chunks. The
+     * printer's receive buffer is tiny; a single large write overflows it, the
+     * ESC/POS parser desyncs, and the printer spews image bytes as text (garbage)
+     * while cutting the image off. Chunking keeps the parser in sync.
+     */
+    private fun writePaced(output: java.io.OutputStream, bytes: ByteArray) {
+        val chunkSize = 4096
+        var offset = 0
+        while (offset < bytes.size) {
+            val end = minOf(offset + chunkSize, bytes.size)
+            output.write(bytes, offset, end - offset)
+            output.flush()
+            offset = end
+            if (offset < bytes.size) Thread.sleep(8)
+        }
+    }
+
+    /** Feeds [END_FEED_DOTS] dot rows of blank paper using banded GS v 0 rasters. */
+    private fun writeTailFeed(output: java.io.OutputStream) {
+        val bytesPerRow = PRINT_DOTS_WIDE / 8
+        var remaining = END_FEED_DOTS
+        while (remaining > 0) {
+            val bandHeight = minOf(192, remaining)
+            output.write(
+                byteArrayOf(
+                    0x1D, 0x76, 0x30, 0x00,
+                    (bytesPerRow and 0xFF).toByte(),
+                    ((bytesPerRow shr 8) and 0xFF).toByte(),
+                    (bandHeight and 0xFF).toByte(),
+                    ((bandHeight shr 8) and 0xFF).toByte(),
+                ),
+            )
+            writePaced(output, ByteArray(bytesPerRow * bandHeight))
+            remaining -= bandHeight
         }
     }
 
     private fun bitmapToEscPos(source: Bitmap): ByteArray {
-        val targetWidth = 576
+        val targetWidth = PRINT_DOTS_WIDE
         val targetHeight = (source.height * (targetWidth.toDouble() / source.width))
             .roundToInt()
             .coerceAtLeast(1)
@@ -145,6 +240,38 @@ class MainActivity : FlutterActivity() {
         val output = ByteArrayOutputStream(bytesPerRow * targetHeight + 64)
         val pixels = IntArray(targetWidth * targetHeight)
         bitmap.getPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight)
+
+        // 1-bit grayscale halftone: Floyd–Steinberg error diffusion with a brightness
+        // lift. Lifting the luminance before thresholding keeps the print light and
+        // airy (matching the reference sample); error diffusion renders photographic
+        // gray tones as smooth dot patterns instead of coarse solid-black blobs.
+        val dithered = ByteArray(targetWidth * targetHeight) // 1 = black
+        val errors = FloatArray(targetWidth * targetHeight)
+        for (y in 0 until targetHeight) {
+            for (x in 0 until targetWidth) {
+                val color = pixels[y * targetWidth + x]
+                val alpha = color ushr 24 and 0xFF
+                val luminance = if (alpha > 32) {
+                    val red = color ushr 16 and 0xFF
+                    val green = color ushr 8 and 0xFF
+                    val blue = color and 0xFF
+                    (red * 299 + green * 587 + blue * 114) / 1000
+                } else {
+                    255 // transparent pixels print as paper
+                }
+                var value = (luminance * PRINT_BRIGHTNESS) + errors[y * targetWidth + x]
+                if (value >= 255f) value = 255f
+                val black = value < PRINT_THRESHOLD
+                if (black) dithered[y * targetWidth + x] = 1
+                val quantError = value - if (black) 0f else 255f
+                if (x + 1 < targetWidth) errors[y * targetWidth + x + 1] += quantError * 7f / 16f
+                if (y + 1 < targetHeight) {
+                    if (x > 0) errors[(y + 1) * targetWidth + x - 1] += quantError * 3f / 16f
+                    errors[(y + 1) * targetWidth + x] += quantError * 5f / 16f
+                    if (x + 1 < targetWidth) errors[(y + 1) * targetWidth + x + 1] += quantError * 1f / 16f
+                }
+            }
+        }
 
         var startY = 0
         while (startY < targetHeight) {
@@ -163,14 +290,9 @@ class MainActivity : FlutterActivity() {
                     var packed = 0
                     for (bit in 0..7) {
                         val x = byteX * 8 + bit
-                        val color = pixels[y * targetWidth + x]
-                        val alpha = color ushr 24 and 0xFF
-                        val red = color ushr 16 and 0xFF
-                        val green = color ushr 8 and 0xFF
-                        val blue = color and 0xFF
-                        val luminance = (red * 299 + green * 587 + blue * 114) / 1000
-                        val threshold = 96 + BAYER_4[y and 3][x and 3] * 8
-                        if (alpha > 32 && luminance < threshold) packed = packed or (1 shl (7 - bit))
+                        if (dithered[y * targetWidth + x] == 1.toByte()) {
+                            packed = packed or (1 shl (7 - bit))
+                        }
                     }
                     output.write(packed)
                 }
@@ -219,17 +341,28 @@ class MainActivity : FlutterActivity() {
             Build.MANUFACTURER.contains("Genymotion")
 
     override fun onDestroy() {
+        closePrinterSocket(printerSocketInstance)
         ioExecutor.shutdownNow()
         super.onDestroy()
     }
 
     companion object {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-        private val BAYER_4 = arrayOf(
-            intArrayOf(0, 8, 2, 10),
-            intArrayOf(12, 4, 14, 6),
-            intArrayOf(3, 11, 1, 9),
-            intArrayOf(15, 7, 13, 5),
-        )
+
+        /** Printable dot width of the Vozy G80 (80 mm paper at 203 DPI). */
+        private const val PRINT_DOTS_WIDE = 576
+
+        /**
+         * Luminance multiplier applied before thresholding. Values above 1 lighten
+         * the print; 1.2 matches the reference sample's density (~28% ink coverage),
+         * 1.45 gives a brighter, high-key "faded polaroid" look (~21% coverage).
+         */
+        private const val PRINT_BRIGHTNESS = 1.45f
+
+        /** Dithering threshold: pixels darker than this print as black. */
+        private const val PRINT_THRESHOLD = 128f
+
+        /** Blank raster rows fed after the last copy (320 rows = 40 mm at 8 dots/mm). */
+        private const val END_FEED_DOTS = 320
     }
 }
