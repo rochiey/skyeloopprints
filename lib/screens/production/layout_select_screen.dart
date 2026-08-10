@@ -6,7 +6,7 @@ import '../../theme/skyeloop_theme.dart';
 import '../../widgets/back_to_start_button.dart';
 import '../../widgets/kiosk_shell.dart';
 import '../../widgets/screen_heading.dart';
-import 'capture_screen.dart';
+import 'payment_screen.dart';
 
 class LayoutSelectScreen extends StatelessWidget {
   const LayoutSelectScreen({super.key});
@@ -18,7 +18,7 @@ class LayoutSelectScreen extends StatelessWidget {
       child: KioskShell(
         header: const ScreenHeading(
           title: 'Choose your moment',
-          subtitle: 'Pick the photo layout you would like to print.',
+          subtitle: 'Pick a layout, pay, then strike a pose.',
         ),
         footer: const BackToStartButton(),
         child: LayoutBuilder(
@@ -66,7 +66,7 @@ class _TierCard extends StatelessWidget {
         onTap: () {
           AppScope.of(context, listen: false).beginSession(tier);
           Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const CaptureScreen()),
+            MaterialPageRoute<void>(builder: (_) => const PaymentScreen()),
           );
         },
         child: Padding(

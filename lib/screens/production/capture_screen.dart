@@ -13,7 +13,7 @@ import '../../theme/skyeloop_theme.dart';
 import '../../widgets/back_to_start_button.dart';
 import '../../widgets/kiosk_shell.dart';
 import '../../widgets/screen_heading.dart';
-import 'payment_screen.dart';
+import 'preview_edit_screen.dart';
 
 class CaptureScreen extends StatefulWidget {
   const CaptureScreen({super.key});
@@ -122,7 +122,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
         await Future<void>.delayed(const Duration(milliseconds: 600));
         if (!mounted) return;
         Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const PaymentScreen()),
+          MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()),
         );
       }
     } on CameraException catch (error) {
@@ -158,7 +158,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
     if (!mounted) return;
     setState(() => _capturing = false);
     if (session.photoPaths.length == session.tier.shotCount) {
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PaymentScreen()));
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()));
     }
   }
 

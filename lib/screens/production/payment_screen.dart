@@ -7,7 +7,7 @@ import '../../theme/skyeloop_theme.dart';
 import '../../widgets/back_to_start_button.dart';
 import '../../widgets/kiosk_shell.dart';
 import '../../widgets/screen_heading.dart';
-import 'preview_edit_screen.dart';
+import 'capture_screen.dart';
 
 class PaymentScreen extends StatelessWidget {
   const PaymentScreen({super.key});
@@ -23,7 +23,7 @@ class PaymentScreen extends StatelessWidget {
       child: KioskShell(
         header: ScreenHeading(
           title: 'Pay ${tier.priceLabel}',
-          subtitle: 'Scan the payment QR below. Tap Done after you have paid.',
+          subtitle: 'Scan the payment QR below, then tap Done to start your photo session.',
         ),
         footer: const BackToStartButton(),
         child: Center(
@@ -77,10 +77,10 @@ class PaymentScreen extends StatelessWidget {
                       const SizedBox(height: 22),
                       FilledButton.icon(
                         onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()),
+                          MaterialPageRoute<void>(builder: (_) => const CaptureScreen()),
                         ),
                         icon: const Icon(Icons.check_rounded),
-                        label: const Text('Done — I have paid'),
+                        label: const Text('Paid — Take photos'),
                       ),
                     ],
                   ),
