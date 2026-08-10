@@ -1,16 +1,23 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 
 class LocalShare {
-  const LocalShare({required this.url, required this.address});
+  const LocalShare({
+    required this.url,
+    required this.address,
+    this.candidates = const [],
+  });
 
   final String url;
   final String address;
+
+  /// Every detected non-loopback IPv4, best (hotspot) first, for diagnostics.
+  final List<String> candidates;
 }
 
 class LocalServerService {
@@ -30,6 +37,8 @@ class LocalServerService {
       ..get('/<id>', _page)
       ..get('/<id>/photo.png', _photo);
     try {
+      // anyIPv4 + shared: answer on every interface (hotspot, Wi‑Fi, Ethernet)
+      // so the phone can reach the page no matter which network it is on.
       _server = await shelf_io.serve(
         const Pipeline()
             .addMiddleware(logRequests())
@@ -42,11 +51,12 @@ class LocalServerService {
       return null;
     }
 
-    final address = await _findLanAddress();
-    if (address == null) return null;
+    final candidates = await _findLanAddresses();
+    if (candidates.isEmpty) return null;
     return LocalShare(
-      address: address,
-      url: 'http://$address:8080/$sessionId',
+      address: candidates.first,
+      candidates: candidates,
+      url: 'http://${candidates.first}:8080/$sessionId',
     );
   }
 
@@ -84,21 +94,22 @@ a{display:inline-block;margin:24px;padding:16px 28px;background:#09549b;color:wh
     );
   }
 
-  Future<String?> _findLanAddress() async {
-    final interfaces = await NetworkInterface.list(
-      type: InternetAddressType.IPv4,
-      includeLoopback: false,
-    );
-    final candidates = interfaces
-        .expand((interface) => interface.addresses)
-        .map((address) => address.address)
-        .where((address) => !address.startsWith('169.254.'))
-        .toList();
-    if (candidates.isEmpty) return null;
-    return candidates.firstWhere(
-      (address) => address.startsWith('192.168.') || address.startsWith('10.'),
-      orElse: () => candidates.first,
-    );
+  /// Collects every non-loopback IPv4 address, best (hotspot) first. Never
+  /// throws: enumeration failures simply yield no candidates so the caller can
+  /// show a friendly "no network" state.
+  Future<List<String>> _findLanAddresses() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      final addresses = interfaces
+          .expand((interface) => interface.addresses)
+          .map((address) => address.address);
+      return rankLanAddresses(addresses);
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> stop() async {
@@ -107,5 +118,30 @@ a{display:inline-block;margin:24px;padding:16px 28px;background:#09549b;color:wh
     await _server?.close(force: true);
     _server = null;
   }
+}
+
+/// Ranks candidate IPv4 addresses for the digital-copy QR, best (hotspot) first:
+/// Android/Samsung hotspot AP subnets, then other AP ranges, then other private
+/// ranges, then anything else. Link-local (169.254.x) addresses are dropped.
+@visibleForTesting
+List<String> rankLanAddresses(Iterable<String> addresses) {
+  int rank(String ip) {
+    if (ip.startsWith('192.168.43.') ||
+        ip.startsWith('192.168.44.') ||
+        ip.startsWith('10.42.')) {
+      return 0; // Android / Linux hotspot soft-AP subnet
+    }
+    if (ip.startsWith('192.168.')) return 1; // typical home / café router
+    if (ip.startsWith('10.')) return 2;
+    if (ip.startsWith('172.')) return 3;
+    return 4;
+  }
+
+  final list = addresses.where((ip) => !ip.startsWith('169.254.')).toSet().toList();
+  list.sort((a, b) {
+    final byRank = rank(a).compareTo(rank(b));
+    return byRank != 0 ? byRank : a.compareTo(b); // stable tie-break
+  });
+  return list;
 }
 
