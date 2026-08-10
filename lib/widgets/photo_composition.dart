@@ -26,21 +26,21 @@ class PhotoComposition extends StatelessWidget {
   /// The composition is always laid out at print size (576 px wide = the
   /// printer's 576-dot line), and the preview scales it down with a FittedBox.
   static const double _printWidth = 576;
-  static const double _standardHeight = 935; // single/grid: portrait photo area
-  static const double _stripHeight = 1515; // 3 photos stacked at 4:3
+  static const double _standardHeight = 821; // single/grid: portrait photo area (~4:5)
+  static const double _stripHeight = 1385; // 3 photos stacked at 4:3
 
-  /// Fixed header band: room for the cafe name at ~10 mm (2 lines of 80 px).
-  static const double _headerBand = 200;
+  /// Fixed header band: room for the cafe name at 5 mm (single line of 40 px).
+  static const double _headerBand = 72;
   /// Fixed footer band holding the brand + date.
   static const double _footerBand = 56;
 
   static const TextStyle _headerStyle = TextStyle(
     fontFamily: 'Poppins',
     color: SkyeColors.ink,
-    fontSize: 80,
+    fontSize: 40,
     fontWeight: FontWeight.w700,
-    letterSpacing: 2,
-    height: 1.05,
+    letterSpacing: 1.5,
+    height: 1.1,
   );
   static const TextStyle _footerStyle = TextStyle(
     fontFamily: 'Poppins',
@@ -86,7 +86,7 @@ class PhotoComposition extends StatelessWidget {
                 child: Text(
                   venueName.toUpperCase(),
                   textAlign: TextAlign.center,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _headerStyle,
                 ),
@@ -150,7 +150,7 @@ class PhotoComposition extends StatelessWidget {
                       child: Text(
                         venueName.toUpperCase(),
                         textAlign: TextAlign.center,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: _headerStyle,
                       ),

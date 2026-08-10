@@ -241,35 +241,79 @@ class MainActivity : FlutterActivity() {
         val pixels = IntArray(targetWidth * targetHeight)
         bitmap.getPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight)
 
-        // 1-bit grayscale halftone: Floyd–Steinberg error diffusion with a brightness
-        // lift. Lifting the luminance before thresholding keeps the print light and
-        // airy (matching the reference sample); error diffusion renders photographic
-        // gray tones as smooth dot patterns instead of coarse solid-black blobs.
+        // 1-bit grayscale halftone. Pipeline: luminance → (optional local contrast)
+        // → tone curve (levels + shadow-lift gamma + ink-range cap) → error
+        // diffusion. The tone curve is the key fix for "faces print too dark": it
+        // lifts shadows out of solid black and keeps highlight/skin gradation
+        // instead of clipping it to paper.
         val dithered = ByteArray(targetWidth * targetHeight) // 1 = black
+        val luma = FloatArray(targetWidth * targetHeight)
+        for (i in 0 until targetWidth * targetHeight) {
+            val color = pixels[i]
+            val alpha = color ushr 24 and 0xFF
+            luma[i] = if (alpha > 32) {
+                val red = color ushr 16 and 0xFF
+                val green = color ushr 8 and 0xFF
+                val blue = color and 0xFF
+                ((red * 299 + green * 587 + blue * 114) / 1000).toFloat()
+            } else {
+                255f // transparent pixels print as paper
+            }
+        }
+        // Optional local-contrast: a light 3×3 unsharp mask restores face detail
+        // that 1-bit quantization flattens. Set PRINT_SHARPEN to 0 to disable.
+        if (PRINT_SHARPEN > 0f) {
+            val blurred = FloatArray(luma.size)
+            for (y in 0 until targetHeight) {
+                for (x in 0 until targetWidth) {
+                    var sum = 0f
+                    var count = 0
+                    for (dy in -1..1) {
+                        val ny = y + dy
+                        if (ny !in 0 until targetHeight) continue
+                        for (dx in -1..1) {
+                            val nx = x + dx
+                            if (nx in 0 until targetWidth) {
+                                sum += luma[ny * targetWidth + nx]
+                                count++
+                            }
+                        }
+                    }
+                    blurred[y * targetWidth + x] = sum / count
+                }
+            }
+            for (i in luma.indices) {
+                luma[i] = (luma[i] + PRINT_SHARPEN * (luma[i] - blurred[i])).coerceIn(0f, 255f)
+            }
+        }
+        // Tone curve: input levels compression, shadow-lifting gamma, output ink cap.
+        for (i in luma.indices) {
+            var t = (luma[i] - INPUT_BLACK_POINT) / (INPUT_WHITE_POINT - INPUT_BLACK_POINT)
+            t = t.coerceIn(0f, 1f)
+            val lifted = Math.pow(t.toDouble(), 1.0 / PRINT_GAMMA.toDouble()).toFloat()
+            luma[i] = PRINT_MIN_OUT + (PRINT_MAX_OUT - PRINT_MIN_OUT) * lifted
+        }
+        // Atkinson error diffusion: 1/8 of the error is pushed to six neighbors
+        // (3/4 total diffused). It prints visibly lighter than Floyd–Steinberg with
+        // open highlights and fine texture — the classic choice for 1-bit photos.
         val errors = FloatArray(targetWidth * targetHeight)
         for (y in 0 until targetHeight) {
             for (x in 0 until targetWidth) {
-                val color = pixels[y * targetWidth + x]
-                val alpha = color ushr 24 and 0xFF
-                val luminance = if (alpha > 32) {
-                    val red = color ushr 16 and 0xFF
-                    val green = color ushr 8 and 0xFF
-                    val blue = color and 0xFF
-                    (red * 299 + green * 587 + blue * 114) / 1000
-                } else {
-                    255 // transparent pixels print as paper
-                }
-                var value = (luminance * PRINT_BRIGHTNESS) + errors[y * targetWidth + x]
+                val idx = y * targetWidth + x
+                var value = luma[idx] + errors[idx]
                 if (value >= 255f) value = 255f
                 val black = value < PRINT_THRESHOLD
-                if (black) dithered[y * targetWidth + x] = 1
+                if (black) dithered[idx] = 1
                 val quantError = value - if (black) 0f else 255f
-                if (x + 1 < targetWidth) errors[y * targetWidth + x + 1] += quantError * 7f / 16f
+                val eighth = quantError / 8f
+                if (x + 1 < targetWidth) errors[idx + 1] += eighth
+                if (x + 2 < targetWidth) errors[idx + 2] += eighth
                 if (y + 1 < targetHeight) {
-                    if (x > 0) errors[(y + 1) * targetWidth + x - 1] += quantError * 3f / 16f
-                    errors[(y + 1) * targetWidth + x] += quantError * 5f / 16f
-                    if (x + 1 < targetWidth) errors[(y + 1) * targetWidth + x + 1] += quantError * 1f / 16f
+                    if (x > 0) errors[idx + targetWidth - 1] += eighth
+                    errors[idx + targetWidth] += eighth
+                    if (x + 1 < targetWidth) errors[idx + targetWidth + 1] += eighth
                 }
+                if (y + 2 < targetHeight) errors[idx + 2 * targetWidth] += eighth
             }
         }
 
@@ -352,15 +396,26 @@ class MainActivity : FlutterActivity() {
         /** Printable dot width of the Vozy G80 (80 mm paper at 203 DPI). */
         private const val PRINT_DOTS_WIDE = 576
 
+        /** sRGB input black/white points for the tone-curve levels compression. */
+        private const val INPUT_BLACK_POINT = 25f
+        private const val INPUT_WHITE_POINT = 235f
+
+        /** Shadow-lifting gamma: output = input^(1/gamma), lightens midtones/shadows. */
+        private const val PRINT_GAMMA = 1.8f
+
         /**
-         * Luminance multiplier applied before thresholding. Values above 1 lighten
-         * the print; 1.2 matches the reference sample's density (~28% ink coverage),
-         * 1.45 gives a brighter, high-key "faded polaroid" look (~21% coverage).
+         * Output ink-range cap (dot-gain compensation): shadows map to ~90% ink,
+         * highlights to ~4%, so thermal dot bleed can never fuse details into a
+         * solid black field and whites never go fully solid.
          */
-        private const val PRINT_BRIGHTNESS = 1.45f
+        private const val PRINT_MIN_OUT = 25f
+        private const val PRINT_MAX_OUT = 245f
 
         /** Dithering threshold: pixels darker than this print as black. */
         private const val PRINT_THRESHOLD = 128f
+
+        /** Local-contrast sharpen amount applied to luminance before dithering (0 = off). */
+        private const val PRINT_SHARPEN = 0.3f
 
         /** Blank raster rows fed after the last copy (320 rows = 40 mm at 8 dots/mm). */
         private const val END_FEED_DOTS = 320
