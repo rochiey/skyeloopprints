@@ -9,21 +9,45 @@ import '../../widgets/kiosk_shell.dart';
 import '../../widgets/screen_heading.dart';
 import 'capture_screen.dart';
 
-class PaymentScreen extends StatelessWidget {
+enum _PaymentMethod { gcash, bankTransfer }
+
+class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
+
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  _PaymentMethod _method = _PaymentMethod.gcash;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final tier = app.session!.tier;
-    final qrPath = app.config.paymentQrPaths[tier];
+    final gcashPath = app.config.paymentQrPaths[tier];
+    final bankPath = app.config.bankTransferQrPaths[tier];
+    final hasGcash = gcashPath != null && File(gcashPath).existsSync();
+    final hasBank = bankPath != null && File(bankPath).existsSync();
+    final availableMethods = <_PaymentMethod>[
+      if (hasGcash) _PaymentMethod.gcash,
+      if (hasBank) _PaymentMethod.bankTransfer,
+    ];
+    final method = availableMethods.contains(_method) ? _method : _PaymentMethod.gcash;
+    final qrPath = switch (method) {
+      _PaymentMethod.gcash => gcashPath,
+      _PaymentMethod.bankTransfer => bankPath,
+    };
     final hasQr = qrPath != null && File(qrPath).existsSync();
+    final subtitle = hasGcash && hasBank
+        ? 'Scan the GCash or bank transfer QR below, then tap Done to start your photo session.'
+        : 'Scan the payment QR below, then tap Done to start your photo session.';
     return PopScope(
       canPop: false,
       child: KioskShell(
         header: ScreenHeading(
           title: 'Pay ${tier.priceLabel}',
-          subtitle: 'Scan the payment QR below, then tap Done to start your photo session.',
+          subtitle: subtitle,
         ),
         footer: const BackToStartButton(),
         child: Center(
@@ -37,6 +61,28 @@ class PaymentScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      if (availableMethods.length > 1) ...[
+                        SegmentedButton<_PaymentMethod>(
+                          segments: const [
+                            ButtonSegment(
+                              value: _PaymentMethod.gcash,
+                              label: Text('GCash'),
+                              icon: Icon(Icons.qr_code_2_rounded),
+                            ),
+                            ButtonSegment(
+                              value: _PaymentMethod.bankTransfer,
+                              label: Text('Bank transfer'),
+                              icon: Icon(Icons.account_balance_rounded),
+                            ),
+                          ],
+                          selected: {method},
+                          onSelectionChanged: (selection) {
+                            setState(() => _method = selection.first);
+                          },
+                          showSelectedIcon: false,
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                       AspectRatio(
                         aspectRatio: 1,
                         child: DecoratedBox(

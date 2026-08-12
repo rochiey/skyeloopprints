@@ -31,9 +31,14 @@ class AdminConfigService {
 
   AdminConfig load() {
     final qrPaths = <PricingTier, String>{};
+    final bankQrPaths = <PricingTier, String>{};
     for (final tier in PricingTier.values) {
       final value = _preferences.getString(_qrKey(tier));
       if (value != null && File(value).existsSync()) qrPaths[tier] = value;
+      final bankValue = _preferences.getString(_bankQrKey(tier));
+      if (bankValue != null && File(bankValue).existsSync()) {
+        bankQrPaths[tier] = bankValue;
+      }
     }
     final branding = _preferences.getString(_brandingKey);
     return AdminConfig(
@@ -41,6 +46,7 @@ class AdminConfigService {
       brandingPath:
           branding != null && File(branding).existsSync() ? branding : null,
       paymentQrPaths: qrPaths,
+      bankTransferQrPaths: bankQrPaths,
       printerAddress: _preferences.getString(_printerAddressKey),
       printerName: _preferences.getString(_printerNameKey),
     );
@@ -81,6 +87,10 @@ class AdminConfigService {
 
   Future<void> setPaymentQrPath(PricingTier tier, String path) async {
     await _preferences.setString(_qrKey(tier), path);
+  }
+
+  Future<void> setBankTransferQrPath(PricingTier tier, String path) async {
+    await _preferences.setString(_bankQrKey(tier), path);
   }
 
   Future<void> setPrinter({required String address, required String name}) async {
@@ -133,4 +143,5 @@ class AdminConfigService {
   }
 
   String _qrKey(PricingTier tier) => 'payment_qr_${tier.storageKey}';
+  String _bankQrKey(PricingTier tier) => 'payment_qr_bank_${tier.storageKey}';
 }

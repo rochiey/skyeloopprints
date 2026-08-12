@@ -76,12 +76,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     });
   }
 
-  Future<void> _pickQr(PricingTier tier) async {
+  Future<void> _pickQr(PricingTier tier, {bool bank = false}) async {
     await _withBusy(() async {
       final app = AppScope.of(context, listen: false);
-      final path = await app.configService.chooseAndSaveImage('payment_${tier.storageKey}');
+      final slot = bank
+          ? 'payment_bank_${tier.storageKey}'
+          : 'payment_${tier.storageKey}';
+      final path = await app.configService.chooseAndSaveImage(slot);
       if (path == null) return;
-      await app.configService.setPaymentQrPath(tier, path);
+      if (bank) {
+        await app.configService.setBankTransferQrPath(tier, path);
+      } else {
+        await app.configService.setPaymentQrPath(tier, path);
+      }
       app.refreshConfig();
     });
   }
@@ -304,7 +311,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 const SizedBox(height: 22),
                 Text('Payment QR images', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 6),
-                const Text('Upload one static payment QR for each price. SkyeLoop does not verify payment.'),
+                const Text(
+                    'Upload a GCash QR and a bank transfer QR for each price. '
+                    'Customers can pick which one to scan. SkyeLoop does not verify payment.'),
                 const SizedBox(height: 14),
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -318,8 +327,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             width: width,
                             child: _QrConfigCard(
                               tier: tier,
-                              imagePath: config.paymentQrPaths[tier],
-                              onUpload: _busy ? null : () => _pickQr(tier),
+                              gcashImagePath: config.paymentQrPaths[tier],
+                              bankImagePath: config.bankTransferQrPaths[tier],
+                              onGcashUpload: _busy ? null : () => _pickQr(tier),
+                              onBankUpload: _busy ? null : () => _pickQr(tier, bank: true),
                             ),
                           ),
                       ],
@@ -463,15 +474,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 }
 
 class _QrConfigCard extends StatelessWidget {
-  const _QrConfigCard({required this.tier, required this.imagePath, required this.onUpload});
+  const _QrConfigCard({
+    required this.tier,
+    required this.gcashImagePath,
+    required this.bankImagePath,
+    required this.onGcashUpload,
+    required this.onBankUpload,
+  });
 
   final PricingTier tier;
-  final String? imagePath;
-  final VoidCallback? onUpload;
+  final String? gcashImagePath;
+  final String? bankImagePath;
+  final VoidCallback? onGcashUpload;
+  final VoidCallback? onBankUpload;
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = imagePath != null && File(imagePath!).existsSync();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -480,30 +498,64 @@ class _QrConfigCard extends StatelessWidget {
             Text('${tier.priceLabel} • ${tier.shotCount} photo${tier.shotCount == 1 ? '' : 's'}',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            AspectRatio(
-              aspectRatio: 1,
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: hasImage ? SkyeColors.blue : SkyeColors.rose, width: 2)),
-                child: hasImage
-                    ? ClipRRect(borderRadius: BorderRadius.circular(16),
-                        child: Image.file(File(imagePath!), fit: BoxFit.contain))
-                    : const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.qr_code_2_rounded, size: 72, color: SkyeColors.ink),
-                          SizedBox(height: 8),
-                          Text('Placeholder QR', style: TextStyle(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-              ),
+            _QrSlot(
+              label: 'GCash',
+              imagePath: gcashImagePath,
+              onUpload: onGcashUpload,
             ),
-            const SizedBox(height: 12),
-            FilledButton.tonalIcon(onPressed: onUpload,
-                icon: const Icon(Icons.upload_file_outlined), label: Text(hasImage ? 'Replace QR' : 'Upload QR')),
+            const SizedBox(height: 14),
+            _QrSlot(
+              label: 'Bank transfer',
+              imagePath: bankImagePath,
+              onUpload: onBankUpload,
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _QrSlot extends StatelessWidget {
+  const _QrSlot({
+    required this.label,
+    required this.imagePath,
+    required this.onUpload,
+  });
+
+  final String label;
+  final String? imagePath;
+  final VoidCallback? onUpload;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imagePath != null && File(imagePath!).existsSync();
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        AspectRatio(
+          aspectRatio: 1,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: hasImage ? SkyeColors.blue : SkyeColors.rose, width: 2)),
+            child: hasImage
+                ? ClipRRect(borderRadius: BorderRadius.circular(16),
+                    child: Image.file(File(imagePath!), fit: BoxFit.contain))
+                : const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.qr_code_2_rounded, size: 56, color: SkyeColors.ink),
+                      SizedBox(height: 6),
+                      Text('No QR yet', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(onPressed: onUpload,
+            icon: const Icon(Icons.upload_file_outlined), label: Text(hasImage ? 'Replace QR' : 'Upload QR')),
+      ],
     );
   }
 }
