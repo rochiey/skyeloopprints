@@ -215,7 +215,9 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
             SizedBox(width: 44, child: Text('${session.copies}', textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900))),
             IconButton.filledTonal(
-              onPressed: session.copies < 2 ? () => setState(() => session.copies++) : null,
+              onPressed: session.copies < session.tier.maxCopies
+                  ? () => setState(() => session.copies++)
+                  : null,
               icon: const Icon(Icons.add),
             ),
             const SizedBox(width: 26),

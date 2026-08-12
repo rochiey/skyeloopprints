@@ -5,6 +5,7 @@ enum PricingTier {
     layout: LayoutType.single,
     shotCount: 1,
     price: 20,
+    maxCopies: 1,
     title: 'One perfect shot',
     subtitle: 'Classic portrait',
   ),
@@ -12,6 +13,7 @@ enum PricingTier {
     layout: LayoutType.strip,
     shotCount: 3,
     price: 30,
+    maxCopies: 3,
     title: 'Three-photo strip',
     subtitle: 'Three moments in a row',
   ),
@@ -19,6 +21,7 @@ enum PricingTier {
     layout: LayoutType.grid,
     shotCount: 4,
     price: 50,
+    maxCopies: 5,
     title: 'Four-photo grid',
     subtitle: 'A full little story',
   );
@@ -27,6 +30,7 @@ enum PricingTier {
     required this.layout,
     required this.shotCount,
     required this.price,
+    required this.maxCopies,
     required this.title,
     required this.subtitle,
   });
@@ -34,6 +38,7 @@ enum PricingTier {
   final LayoutType layout;
   final int shotCount;
   final int price;
+  final int maxCopies;
   final String title;
   final String subtitle;
 
