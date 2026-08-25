@@ -30,4 +30,22 @@ void main() {
       expect(rankLanAddresses(['169.254.1.1']), isEmpty);
     });
   });
+
+  group('buildDigitalCopyPageHtml', () {
+    test('serves the photo, a Save-to-Photos button and a download fallback', () {
+      final html = buildDigitalCopyPageHtml('abc123');
+      expect(html, contains('src="/abc123/photo.png"'));
+      expect(html, contains('id="save"'));
+      expect(html, contains('Save to Photos'));
+      expect(html, contains('navigator.share'));
+      expect(html, contains('navigator.canShare'));
+      expect(html, contains('href="/abc123/photo.png" download="skyeloop-photo.png"'));
+      expect(html, contains('Download file'));
+    });
+
+    test('keeps the download link labelled for iOS so users know it goes to Files', () {
+      final html = buildDigitalCopyPageHtml('abc123');
+      expect(html, contains('Download file (goes to Files)'));
+    });
+  });
 }

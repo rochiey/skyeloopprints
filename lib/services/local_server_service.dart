@@ -66,16 +66,7 @@ class LocalServerService {
     }
     final safeId = Uri.encodeComponent(id);
     return Response.ok(
-      '''<!doctype html>
-<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Your SkyeLoop photo</title><style>
-body{margin:0;background:#f8efe5;color:#33210e;font-family:system-ui;text-align:center}
-main{max-width:680px;margin:auto;padding:24px}img{width:100%;border-radius:20px;box-shadow:0 12px 40px #33210e33}
-a{display:inline-block;margin:24px;padding:16px 28px;background:#09549b;color:white;text-decoration:none;border-radius:16px;font-weight:700}
-</style></head><body><main><h1>Your SkyeLoop moment</h1>
-<img src="/$safeId/photo.png" alt="Your photo"><br>
-<a href="/$safeId/photo.png" download="skyeloop-photo.png">Save photo</a>
-<p>Keep this page open until your download finishes.</p></main></body></html>''',
+      buildDigitalCopyPageHtml(safeId),
       headers: {'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store'},
     );
   }
@@ -118,6 +109,86 @@ a{display:inline-block;margin:24px;padding:16px 28px;background:#09549b;color:wh
     await _server?.close(force: true);
     _server = null;
   }
+}
+
+/// Renders the phone-facing digital-copy page.
+///
+/// iOS quirk: a plain `download` link makes Safari save to the Files app,
+/// never the Photos gallery. The primary action therefore uses the Web Share
+/// API (Level 2) with a File — on iOS the share sheet exposes "Save Image",
+/// which writes straight to Photos; on Android it offers the share/save
+/// sheet. The `download` link stays as a fallback for browsers without file
+/// sharing (and is relabelled on iOS so users know where it lands), and the
+/// hint text teaches the long-press path (iOS: "Save Image"; Android:
+/// "Download image"), which respects the image's `content-disposition:
+/// inline` header and already behaves correctly.
+@visibleForTesting
+String buildDigitalCopyPageHtml(String safeId) {
+  return '''
+<!doctype html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<title>Your SkyeLoop photo</title>
+<style>
+body{margin:0;background:#f8efe5;color:#33210e;font-family:system-ui;text-align:center}
+main{max-width:680px;margin:auto;padding:24px}
+img{width:100%;border-radius:20px;box-shadow:0 12px 40px #33210e33;display:block}
+.actions{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin:24px 0 8px}
+button,a.dl{font:inherit;font-weight:700;padding:16px 28px;border-radius:16px;text-decoration:none;border:none;cursor:pointer}
+button{background:#09549b;color:white}
+a.dl{background:#ffe7c2;color:#33210e}
+.hint{color:#7a5a2e;font-size:15px;line-height:1.5}
+</style></head><body><main>
+<h1>Your SkyeLoop moment</h1>
+<img id="photo" src="/$safeId/photo.png" alt="Your photo">
+<div class="actions">
+<button id="save" type="button">Save to Photos</button>
+<a id="download" class="dl" href="/$safeId/photo.png" download="skyeloop-photo.png">Download file</a>
+</div>
+<p id="hint" class="hint"></p>
+</main>
+<script>
+var photoUrl = '/$safeId/photo.png';
+var photoFile = null;
+var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+var isAndroid = /Android/i.test(navigator.userAgent);
+
+// Pre-fetch the image as a File so navigator.share runs immediately inside
+// the tap gesture (iOS is picky about that) and the sheet offers "Save Image".
+fetch(photoUrl).then(function (res) { return res.blob(); }).then(function (blob) {
+  photoFile = new File([blob], 'skyeloop-photo.png', { type: 'image/png' });
+}).catch(function () {});
+
+function hint(text) { document.getElementById('hint').textContent = text; }
+
+function fallback() {
+  hint(isIOS
+    ? 'Touch and hold the photo above, then tap Save Image to add it to your Photos.'
+    : 'Touch and hold the photo above, then tap Download image.');
+}
+
+function saveToPhotos() {
+  if (photoFile && navigator.canShare && navigator.canShare({ files: [photoFile] })) {
+    navigator.share({ files: [photoFile], title: 'Your SkyeLoop photo' })
+      .catch(function (e) { if (e.name !== 'AbortError') { fallback(); } });
+  } else {
+    fallback();
+  }
+}
+
+document.getElementById('save').addEventListener('click', saveToPhotos);
+
+if (isIOS) {
+  document.getElementById('download').textContent = 'Download file (goes to Files)';
+  hint('Tap Save to Photos and choose Save Image, or touch and hold the photo and choose Save Image.');
+} else if (isAndroid) {
+  hint('Touch and hold the photo and choose Download image, or tap Save to Photos. Downloads appear in your gallery.');
+} else {
+  hint('Right-click or long-press the photo to save it, or use Download file.');
+}
+</script>
+</body></html>''';
 }
 
 /// Ranks candidate IPv4 addresses for the digital-copy QR, best (hotspot) first:
