@@ -125,16 +125,10 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
       final photo = await _camera!.takePicture();
       _storePhoto(session, photo.path);
       if (!mounted) return;
-      setState(() => _countdown = null);
-      final retaking = _retakeIndex != null;
-      setState(() => _retakeIndex = null);
-      if (!retaking && session.photoPaths.length == session.tier.shotCount) {
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-        if (!mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()),
-        );
-      }
+      setState(() {
+        _countdown = null;
+        _retakeIndex = null;
+      });
     } on CameraException catch (error) {
       _show(error.description ?? 'The photo could not be captured. Please try again.');
     } finally {
@@ -204,9 +198,10 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
       _capturing = false;
       _retakeIndex = null;
     });
-    if (retakeIndex == null && session.photoPaths.length == session.tier.shotCount) {
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()));
-    }
+  }
+
+  void _proceedToPreview() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()));
   }
 
   void _retake() {
@@ -234,27 +229,40 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final session = AppScope.of(context).session!;
+    final allCaptured = session.photoPaths.length >= session.tier.shotCount;
     return PopScope(
       canPop: false,
       child: KioskShell(
         header: ScreenHeading(
-          title: _retakeIndex != null
-              ? 'Retake photo ${_retakeIndex! + 1} of ${session.tier.shotCount}'
-              : 'Photo ${min(session.photoPaths.length + 1, session.tier.shotCount)} of ${session.tier.shotCount}',
-          subtitle: _retakeIndex != null
-              ? 'Look at the camera. We will count down from three for this photo.'
-              : 'Look at the camera. We will count down from three.',
+          title: allCaptured
+              ? 'Ready to continue'
+              : _retakeIndex != null
+                  ? 'Retake photo ${_retakeIndex! + 1} of ${session.tier.shotCount}'
+                  : 'Photo ${min(session.photoPaths.length + 1, session.tier.shotCount)} of ${session.tier.shotCount}',
+          subtitle: allCaptured
+              ? 'Tap a photo to retake it, or Proceed to the next step.'
+              : _retakeIndex != null
+                  ? 'Look at the camera. We will count down from three for this photo.'
+                  : 'Look at the camera. We will count down from three.',
         ),
         footer: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const BackToStartButton(),
-            if (_retakeIndex != null)
-              TextButton.icon(onPressed: _capturing ? null : _cancelRetake,
-                  icon: const Icon(Icons.close), label: const Text('Cancel retake')),
-            if (_retakeIndex == null && session.photoPaths.isNotEmpty)
-              TextButton.icon(onPressed: _capturing ? null : _retake,
-                  icon: const Icon(Icons.refresh), label: const Text('Retake all')),
+            if (allCaptured && _retakeIndex == null)
+              FilledButton.icon(
+                onPressed: _capturing ? null : _proceedToPreview,
+                icon: const Icon(Icons.done_all),
+                label: const Text('Proceed'),
+              )
+            else ...[
+              if (_retakeIndex != null)
+                TextButton.icon(onPressed: _capturing ? null : _cancelRetake,
+                    icon: const Icon(Icons.close), label: const Text('Cancel retake')),
+              if (_retakeIndex == null && session.photoPaths.isNotEmpty)
+                TextButton.icon(onPressed: _capturing ? null : _retake,
+                    icon: const Icon(Icons.refresh), label: const Text('Retake all')),
+            ],
           ],
         ),
         child: LayoutBuilder(
@@ -302,7 +310,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                                       child: FloatingActionButton.large(
                                         heroTag: 'shutter',
                                         backgroundColor: Colors.white,
-                                        onPressed: _capturing ? null : _takeNextPhoto,
+                                        onPressed: _capturing || allCaptured ? null : _takeNextPhoto,
                                         child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
                                       ),
                                     ),
@@ -383,7 +391,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                                     child: FloatingActionButton.large(
                                       heroTag: 'shutter',
                                       backgroundColor: Colors.white,
-                                      onPressed: _capturing ? null : _takeNextPhoto,
+                                      onPressed: _capturing || allCaptured ? null : _takeNextPhoto,
                                       child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
                                     ),
                                   ),
