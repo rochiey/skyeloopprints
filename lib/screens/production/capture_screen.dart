@@ -229,19 +229,22 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final session = AppScope.of(context).session!;
-    final allCaptured = session.photoPaths.length >= session.tier.shotCount;
+    final retaking = _retakeIndex != null;
+    // All slots filled and not in the middle of a retake: the session is
+    // complete and we only await the user's Proceed/retake action.
+    final readyToProceed = !retaking && session.photoPaths.length >= session.tier.shotCount;
     return PopScope(
       canPop: false,
       child: KioskShell(
         header: ScreenHeading(
-          title: allCaptured
+          title: readyToProceed
               ? 'Ready to continue'
-              : _retakeIndex != null
+              : retaking
                   ? 'Retake photo ${_retakeIndex! + 1} of ${session.tier.shotCount}'
                   : 'Photo ${min(session.photoPaths.length + 1, session.tier.shotCount)} of ${session.tier.shotCount}',
-          subtitle: allCaptured
+          subtitle: readyToProceed
               ? 'Tap a photo to retake it, or Proceed to the next step.'
-              : _retakeIndex != null
+              : retaking
                   ? 'Look at the camera. We will count down from three for this photo.'
                   : 'Look at the camera. We will count down from three.',
         ),
@@ -249,17 +252,17 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const BackToStartButton(),
-            if (allCaptured && _retakeIndex == null)
+            if (readyToProceed)
               FilledButton.icon(
                 onPressed: _capturing ? null : _proceedToPreview,
                 icon: const Icon(Icons.done_all),
                 label: const Text('Proceed'),
               )
             else ...[
-              if (_retakeIndex != null)
+              if (retaking)
                 TextButton.icon(onPressed: _capturing ? null : _cancelRetake,
                     icon: const Icon(Icons.close), label: const Text('Cancel retake')),
-              if (_retakeIndex == null && session.photoPaths.isNotEmpty)
+              if (!retaking && session.photoPaths.isNotEmpty)
                 TextButton.icon(onPressed: _capturing ? null : _retake,
                     icon: const Icon(Icons.refresh), label: const Text('Retake all')),
             ],
@@ -310,7 +313,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                                       child: FloatingActionButton.large(
                                         heroTag: 'shutter',
                                         backgroundColor: Colors.white,
-                                        onPressed: _capturing || allCaptured ? null : _takeNextPhoto,
+                                        onPressed: _capturing || readyToProceed ? null : _takeNextPhoto,
                                         child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
                                       ),
                                     ),
@@ -391,7 +394,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                                     child: FloatingActionButton.large(
                                       heroTag: 'shutter',
                                       backgroundColor: Colors.white,
-                                      onPressed: _capturing || allCaptured ? null : _takeNextPhoto,
+                                      onPressed: _capturing || readyToProceed ? null : _takeNextPhoto,
                                       child: const Icon(Icons.camera_alt_rounded, color: SkyeColors.blue, size: 34),
                                     ),
                                   ),
