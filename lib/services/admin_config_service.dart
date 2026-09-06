@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/admin_config.dart';
+import '../models/pricing_tier.dart';
 import '../models/upload_config.dart';
 
 class AdminConfigService {
@@ -20,6 +21,10 @@ class AdminConfigService {
   static const _printerAddressKey = 'printer_address';
   static const _printerNameKey = 'printer_name';
   static const _uploadConfigKey = 'upload_config';
+  static const _copiesLimitEnabledKey = 'copies_limit_enabled';
+  static const _maxCopiesSingleKey = 'max_copies_single';
+  static const _maxCopiesStripKey = 'max_copies_strip';
+  static const _maxCopiesGridKey = 'max_copies_grid';
 
   late SharedPreferences _preferences;
 
@@ -38,6 +43,11 @@ class AdminConfigService {
       paymentTestMode: _preferences.getBool(_paymentTestModeKey) ?? true,
       printerAddress: _preferences.getString(_printerAddressKey),
       printerName: _preferences.getString(_printerNameKey),
+      copiesLimitEnabled:
+          _preferences.getBool(_copiesLimitEnabledKey) ?? false,
+      maxCopiesSingle: _preferences.getInt(_maxCopiesSingleKey) ?? 1,
+      maxCopiesStrip: _preferences.getInt(_maxCopiesStripKey) ?? 3,
+      maxCopiesGrid: _preferences.getInt(_maxCopiesGridKey) ?? 5,
     );
   }
 
@@ -76,6 +86,24 @@ class AdminConfigService {
 
   Future<void> setPaymentTestMode(bool enabled) async {
     await _preferences.setBool(_paymentTestModeKey, enabled);
+  }
+
+  Future<void> setCopiesLimitEnabled(bool enabled) async {
+    await _preferences.setBool(_copiesLimitEnabledKey, enabled);
+  }
+
+  /// Persists the maximum number of copies for [tier]. Values are clamped to
+  /// at least 1 so a limit can never lock an option out entirely.
+  Future<void> setMaxCopies({
+    required PricingTier tier,
+    required int value,
+  }) async {
+    final key = switch (tier) {
+      PricingTier.single => _maxCopiesSingleKey,
+      PricingTier.strip => _maxCopiesStripKey,
+      PricingTier.grid => _maxCopiesGridKey,
+    };
+    await _preferences.setInt(key, value.clamp(1, 99));
   }
 
   Future<void> setPrinter({required String address, required String name}) async {

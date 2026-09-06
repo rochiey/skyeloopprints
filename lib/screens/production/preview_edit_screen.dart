@@ -218,6 +218,9 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final session = app.session!;
+    final maxCopies = app.config.copiesLimitEnabled
+        ? app.config.maxCopiesFor(session.tier)
+        : null;
     return PopScope(
       canPop: false,
       child: KioskShell(
@@ -236,11 +239,14 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
             SizedBox(width: 44, child: Text('${session.copies}', textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900))),
             IconButton.filledTonal(
-              onPressed: session.copies < session.tier.maxCopies
+              onPressed: (maxCopies == null || session.copies < maxCopies)
                   ? () => setState(() => session.copies++)
                   : null,
               icon: const Icon(Icons.add),
             ),
+            if (maxCopies != null)
+              Text('max $maxCopies', style: TextStyle(
+                  fontSize: 13, color: Colors.black.withValues(alpha: .55))),
             const SizedBox(width: 26),
             FilledButton.icon(
               onPressed: _exporting ? null : _exportAndPrint,

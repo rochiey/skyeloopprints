@@ -54,7 +54,9 @@ class MainActivity : FlutterActivity() {
                         if (pngBytes == null || address.isNullOrBlank()) {
                             result.error("INVALID_JOB", "The print image or printer address is missing.", null)
                         } else {
-                            printImage(address, pngBytes, copies.coerceIn(1, 2), result)
+                            // The copy count is controlled by the admin copies
+                            // limit; only guard against absurd/unset values.
+                            printImage(address, pngBytes, copies.coerceIn(1, 10), result)
                         }
                     }
                     else -> result.notImplemented()

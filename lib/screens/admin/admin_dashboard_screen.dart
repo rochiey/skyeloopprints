@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../app.dart';
+import '../../models/pricing_tier.dart';
 import '../../models/upload_config.dart';
 import '../../services/printer_service.dart';
 import '../../theme/skyeloop_theme.dart';
@@ -80,6 +81,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _message(testMode
         ? 'Test mode on: PayMongo QR payments are bypassed.'
         : 'Live mode on: customers must pay through the GCash QR.');
+  }
+
+  Future<void> _setCopiesLimitEnabled(bool enabled) async {
+    final app = AppScope.of(context, listen: false);
+    await app.configService.setCopiesLimitEnabled(enabled);
+    app.refreshConfig();
+    _message(enabled
+        ? 'Copies limit on: customers can print up to the set maximum per option.'
+        : 'Copies limit off: customers can print as many copies as they want.');
+  }
+
+  Future<void> _setMaxCopies(PricingTier tier, int value) async {
+    final app = AppScope.of(context, listen: false);
+    await app.configService.setMaxCopies(tier: tier, value: value);
+    app.refreshConfig();
   }
 
   Future<void> _choosePrinter() async {
@@ -390,6 +406,65 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 22),
+                Text('Copies limit', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 6),
+                const Text(
+                    'Limit how many copies a customer can print for each photo '
+                    'option. Turn the limit off for unlimited copies.'),
+                const SizedBox(height: 14),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text('Enable copies limit',
+                                  style: Theme.of(context).textTheme.titleMedium),
+                            ),
+                            Switch(
+                              value: config.copiesLimitEnabled,
+                              onChanged: _setCopiesLimitEnabled,
+                            ),
+                          ],
+                        ),
+                        if (config.copiesLimitEnabled) ...[
+                          const SizedBox(height: 16),
+                          Text('Maximum copies per option',
+                              style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 8),
+                          for (final tier in PricingTier.values) ...[
+                            const SizedBox(height: 4),
+                            _CopiesLimitRow(
+                              tier: tier,
+                              maxCopies: config.maxCopiesFor(tier),
+                              onChanged: (value) => _setMaxCopies(tier, value),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          Text(
+                            'Customers can choose up to this many copies on the '
+                            'print screen. When the limit is off, the count is '
+                            'unlimited.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: SkyeColors.ink.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ] else
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Text(
+                              'No limit — customers can print as many copies as '
+                              'they want for every option.',
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
                 Text('Auto sales upload', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 6),
                 const Text('Sends completed session data to your server daily. Only uploads over Wi‑Fi.'),
@@ -502,5 +577,45 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 }
 
+class _CopiesLimitRow extends StatelessWidget {
+  const _CopiesLimitRow({
+    required this.tier,
+    required this.maxCopies,
+    required this.onChanged,
+  });
 
+  final PricingTier tier;
+  final int maxCopies;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${tier.title} (${tier.priceLabel})',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        IconButton.outlined(
+          onPressed: maxCopies > 1 ? () => onChanged(maxCopies - 1) : null,
+          icon: const Icon(Icons.remove),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(
+            '$maxCopies',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+        ),
+        IconButton.outlined(
+          onPressed: maxCopies < 99 ? () => onChanged(maxCopies + 1) : null,
+          icon: const Icon(Icons.add),
+        ),
+      ],
+    );
+  }
+}
 

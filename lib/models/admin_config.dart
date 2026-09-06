@@ -1,3 +1,5 @@
+import 'pricing_tier.dart';
+
 class AdminConfig {
   const AdminConfig({
     this.venueName = 'Skye Loop Vendo',
@@ -5,6 +7,10 @@ class AdminConfig {
     this.paymentTestMode = true,
     this.printerAddress,
     this.printerName,
+    this.copiesLimitEnabled = false,
+    this.maxCopiesSingle = 1,
+    this.maxCopiesStrip = 3,
+    this.maxCopiesGrid = 5,
   });
 
   final String venueName;
@@ -16,12 +22,23 @@ class AdminConfig {
   final String? printerAddress;
   final String? printerName;
 
+  /// When true, customers may print at most [maxCopiesFor] copies per option.
+  /// When false, the copies stepper has no upper limit.
+  final bool copiesLimitEnabled;
+  final int maxCopiesSingle;
+  final int maxCopiesStrip;
+  final int maxCopiesGrid;
+
   AdminConfig copyWith({
     String? venueName,
     String? brandingPath,
     bool? paymentTestMode,
     String? printerAddress,
     String? printerName,
+    bool? copiesLimitEnabled,
+    int? maxCopiesSingle,
+    int? maxCopiesStrip,
+    int? maxCopiesGrid,
     bool clearPrinter = false,
   }) {
     return AdminConfig(
@@ -30,7 +47,21 @@ class AdminConfig {
       paymentTestMode: paymentTestMode ?? this.paymentTestMode,
       printerAddress: clearPrinter ? null : printerAddress ?? this.printerAddress,
       printerName: clearPrinter ? null : printerName ?? this.printerName,
+      copiesLimitEnabled: copiesLimitEnabled ?? this.copiesLimitEnabled,
+      maxCopiesSingle: maxCopiesSingle ?? this.maxCopiesSingle,
+      maxCopiesStrip: maxCopiesStrip ?? this.maxCopiesStrip,
+      maxCopiesGrid: maxCopiesGrid ?? this.maxCopiesGrid,
     );
+  }
+
+  /// The configured maximum number of copies for [tier]'s layout option.
+  /// Only enforced when [copiesLimitEnabled] is true.
+  int maxCopiesFor(PricingTier tier) {
+    return switch (tier) {
+      PricingTier.single => maxCopiesSingle,
+      PricingTier.strip => maxCopiesStrip,
+      PricingTier.grid => maxCopiesGrid,
+    };
   }
 }
 
