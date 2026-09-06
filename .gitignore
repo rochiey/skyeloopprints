@@ -12,6 +12,13 @@
 .swiftpm/
 migrate_working_dir/
 
+# Secrets / credentials (never commit these)
+.env
+android/key.properties
+*.jks
+*.keystore
+*.p12
+
 # IntelliJ related
 *.iml
 *.ipr

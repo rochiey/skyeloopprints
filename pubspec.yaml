@@ -23,6 +23,7 @@ dependencies:
   sqflite: ^2.4.2
   connectivity_plus: ^6.1.4
   http: ^1.3.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -33,6 +34,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/default_branding/
+    # PayMongo keys live in this git-ignored file (see .env.example).
+    # It must exist on the machine building the app.
+    - .env
   fonts:
     - family: Poppins
       fonts:

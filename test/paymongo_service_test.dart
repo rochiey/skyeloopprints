@@ -55,7 +55,7 @@ void main() {
         200,
       ),
     ]);
-    final service = PaymongoService(client: client);
+    final service = PaymongoService(client: client, secretKey: 'sk_test_abc');
 
     final source = await service.createGcashSource(amountCentavos: 3000);
 
@@ -68,7 +68,7 @@ void main() {
     expect(request.url.toString(), 'https://api.paymongo.com/v1/sources');
     expect(request.method, 'POST');
     expect(request.headers['Authorization'],
-        'Basic ${PaymongoService.authHeader(PaymongoService.liveSecretKey)}');
+        'Basic ${PaymongoService.authHeader('sk_test_abc')}');
 
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     final attributes =
@@ -98,7 +98,7 @@ void main() {
         200,
       ),
     ]);
-    final service = PaymongoService(client: client);
+    final service = PaymongoService(client: client, secretKey: 'sk_test_abc');
 
     final source = await service.retrieveSource('src_123');
 

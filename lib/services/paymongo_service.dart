@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 /// A GCash payment source created through the PayMongo Sources API.
@@ -27,19 +28,34 @@ class PaymongoSource {
 class PaymongoService {
   PaymongoService({
     http.Client? client,
+    String? publicKey,
+    String? secretKey,
     String baseUrl = 'https://api.paymongo.com/v1',
   })  : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
+        _baseUrl = baseUrl,
+        publicKey = publicKey ?? livePublicKey,
+        secretKey = secretKey ?? liveSecretKey;
 
-  // Skye Loop Vendo live keys. Replace here if the account keys ever rotate.
-  static const livePublicKey = 'REDACTED_PUBLIC_KEY';
-  static const liveSecretKey = 'REDACTED_SECRET_KEY';
+  /// PayMongo account keys, loaded from the git-ignored `.env` file at
+  /// startup (see `.env.example` for the expected variable names). They are
+  /// intentionally NOT hard-coded here so they never get committed.
+  static String get livePublicKey => _envValue('PAYMONGO_PUBLIC_KEY');
+  static String get liveSecretKey => _envValue('PAYMONGO_SECRET_KEY');
+
+  /// Reads [name] from the loaded .env file, or '' when dotenv has not been
+  /// initialized yet (e.g. in unit tests).
+  static String _envValue(String name) {
+    if (!dotenv.isInitialized) return '';
+    return dotenv.maybeGet(name, fallback: '') ?? '';
+  }
 
   static const gcashRedirectSuccessUrl = 'https://paymongo.com/success';
   static const gcashRedirectFailedUrl = 'https://paymongo.com/failed';
 
   final http.Client _client;
   final String _baseUrl;
+  final String publicKey;
+  final String secretKey;
 
   /// Basic auth value for the secret key, per PayMongo's auth scheme
   /// (`base64(secret_key + ':')`).
@@ -55,7 +71,7 @@ class PaymongoService {
     final response = await _client.post(
       Uri.parse('$_baseUrl/sources'),
       headers: <String, String>{
-        'Authorization': 'Basic ${authHeader(liveSecretKey)}',
+        'Authorization': 'Basic ${authHeader(secretKey)}',
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, dynamic>{
@@ -88,7 +104,7 @@ class PaymongoService {
     final response = await _client.get(
       Uri.parse('$_baseUrl/sources/$id'),
       headers: <String, String>{
-        'Authorization': 'Basic ${authHeader(liveSecretKey)}',
+        'Authorization': 'Basic ${authHeader(secretKey)}',
       },
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
