@@ -9,12 +9,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/admin_config.dart';
-import '../models/pricing_tier.dart';
 import '../models/upload_config.dart';
 
 class AdminConfigService {
   static const _venueKey = 'venue_name';
   static const _brandingKey = 'branding_path';
+  static const _paymentTestModeKey = 'payment_test_mode';
   static const _passwordSaltKey = 'admin_password_salt';
   static const _passwordHashKey = 'admin_password_hash';
   static const _printerAddressKey = 'printer_address';
@@ -30,23 +30,12 @@ class AdminConfigService {
   bool get hasPassword => _preferences.containsKey(_passwordHashKey);
 
   AdminConfig load() {
-    final qrPaths = <PricingTier, String>{};
-    final bankQrPaths = <PricingTier, String>{};
-    for (final tier in PricingTier.values) {
-      final value = _preferences.getString(_qrKey(tier));
-      if (value != null && File(value).existsSync()) qrPaths[tier] = value;
-      final bankValue = _preferences.getString(_bankQrKey(tier));
-      if (bankValue != null && File(bankValue).existsSync()) {
-        bankQrPaths[tier] = bankValue;
-      }
-    }
     final branding = _preferences.getString(_brandingKey);
     return AdminConfig(
       venueName: _preferences.getString(_venueKey) ?? 'Skye Loop Vendo',
       brandingPath:
           branding != null && File(branding).existsSync() ? branding : null,
-      paymentQrPaths: qrPaths,
-      bankTransferQrPaths: bankQrPaths,
+      paymentTestMode: _preferences.getBool(_paymentTestModeKey) ?? true,
       printerAddress: _preferences.getString(_printerAddressKey),
       printerName: _preferences.getString(_printerNameKey),
     );
@@ -85,12 +74,8 @@ class AdminConfigService {
     await _preferences.setString(_brandingKey, path);
   }
 
-  Future<void> setPaymentQrPath(PricingTier tier, String path) async {
-    await _preferences.setString(_qrKey(tier), path);
-  }
-
-  Future<void> setBankTransferQrPath(PricingTier tier, String path) async {
-    await _preferences.setString(_bankQrKey(tier), path);
+  Future<void> setPaymentTestMode(bool enabled) async {
+    await _preferences.setBool(_paymentTestModeKey, enabled);
   }
 
   Future<void> setPrinter({required String address, required String name}) async {
@@ -141,7 +126,4 @@ class AdminConfigService {
     }
     return base64UrlEncode(bytes);
   }
-
-  String _qrKey(PricingTier tier) => 'payment_qr_${tier.storageKey}';
-  String _bankQrKey(PricingTier tier) => 'payment_qr_bank_${tier.storageKey}';
 }

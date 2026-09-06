@@ -204,6 +204,26 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PreviewEditScreen()));
   }
 
+  /// The live camera preview. The camera texture is sized to the sensor's
+  /// true aspect ratio (previewSize is reported landscape, so swap it for the
+  /// portrait kiosk) and cover-cropped into the viewfinder frame, so the
+  /// image is never stretched before the shutter is pressed.
+  Widget _cameraPreview() {
+    final previewSize = _camera!.value.previewSize!;
+    return Center(
+      child: ClipRect(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: previewSize.height,
+            height: previewSize.width,
+            child: CameraPreview(_camera!),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _retake() {
     final session = AppScope.of(context, listen: false).session!;
     session.photoPaths.clear();
@@ -287,7 +307,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                               fit: StackFit.expand,
                               children: [
                                 if (_camera?.value.isInitialized ?? false)
-                                  CameraPreview(_camera!)
+                                  _cameraPreview()
                                 else
                                   _CameraUnavailable(
                                     loading: _initializing,
@@ -368,7 +388,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
                             fit: StackFit.expand,
                             children: [
                               if (_camera?.value.isInitialized ?? false)
-                                CameraPreview(_camera!)
+                                _cameraPreview()
                               else
                                 _CameraUnavailable(
                                   loading: _initializing,

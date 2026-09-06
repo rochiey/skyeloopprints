@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 
 import '../../app.dart';
 import '../../models/editor_item.dart';
+import '../../models/stickers.dart';
 import '../../theme/skyeloop_theme.dart';
 import '../../widgets/kiosk_shell.dart';
 import '../../widgets/photo_composition.dart';
@@ -20,7 +21,7 @@ class PreviewEditScreen extends StatefulWidget {
 }
 
 class _PreviewEditScreenState extends State<PreviewEditScreen> {
-  final _compositionKey = GlobalKey();
+  final _compositionKey = GlobalKey<PhotoCompositionState>();
   bool _exporting = false;
 
   Future<void> _addText() async {
@@ -120,36 +121,54 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
   }
 
   Future<void> _addSticker() async {
-    const stickers = [
-      '🥳', '🎉', '🎈', '🎂', '✨', '🩷', '🌟', '🌸',
-      '🌼', '🌻', '🍀', '🌈', '☁️', '💛', '💙', '🫶',
-      '😍', '🥰', '😎', '🤪', '🥳', '🐻', '🐰', '🐱',
-      '☕', '🧁', '🍩', '🍓', '🍒', '🍦', '🍭', '📸',
-    ];
     final sticker = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            children: [
-              Text('Pick a sticker', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: 8,
-                  children: [
-                    for (final value in stickers)
-                      InkWell(
-                        onTap: () => Navigator.pop(context, value),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Center(child: Text(value, style: const TextStyle(fontSize: 38))),
-                      ),
+      isScrollControlled: true,
+      builder: (context) => DefaultTabController(
+        length: kStickerCategories.length,
+        child: SafeArea(
+          child: SizedBox(
+            height: 420,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('Pick a sticker',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    for (final category in kStickerCategories)
+                      Tab(text: category.name),
                   ],
                 ),
-              ),
-            ],
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      for (final category in kStickerCategories)
+                        GridView.count(
+                          padding: const EdgeInsets.all(18),
+                          crossAxisCount: 6,
+                          children: [
+                            for (final value in category.stickers)
+                              InkWell(
+                                onTap: () => Navigator.pop(context, value),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Center(
+                                  child: Text(value,
+                                      style: const TextStyle(fontSize: 38)),
+                                ),
+                              ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -173,6 +192,8 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
     final session = app.session!;
     setState(() => _exporting = true);
     try {
+      // Hide the selection border/toolbar so it is never captured in the print.
+      _compositionKey.currentState?.clearSelection();
       await WidgetsBinding.instance.endOfFrame;
       final boundary = _compositionKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final pixelRatio = 576 / boundary.size.width;
@@ -285,7 +306,9 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                       color: SkyeColors.mist,
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: Text('Tip: use one finger to move an item and two fingers to resize it.'),
+                        child: Text(
+                            'Tip: tap a sticker or text to select it. Drag to move '
+                            'it, tap − / + to resize, or pinch with two fingers.'),
                       ),
                     ),
                   ],
@@ -342,7 +365,9 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                         color: SkyeColors.mist,
                         child: Padding(
                           padding: EdgeInsets.all(16),
-                          child: Text('Tip: use one finger to move an item and two fingers to resize it.'),
+                          child: Text(
+                              'Tip: tap a sticker or text to select it. Drag to move '
+                              'it, tap − / + to resize, or pinch with two fingers.'),
                         ),
                       ),
                     ],
