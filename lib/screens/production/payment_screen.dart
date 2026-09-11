@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app.dart';
 import '../../services/paymongo_service.dart';
@@ -25,13 +24,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Timer? _pollTimer;
 
   _LivePaymentState _state = _LivePaymentState.creating;
-  PaymongoSource? _source;
+  PaymongoQrPayment? _payment;
   String? _errorMessage;
+  String? _errorDetails;
 
   @override
   void initState() {
     super.initState();
-    _createSource();
+    _createQrPayment();
   }
 
   @override
@@ -40,26 +40,43 @@ class _PaymentScreenState extends State<PaymentScreen> {
     super.dispose();
   }
 
-  Future<void> _createSource() async {
+  Future<void> _createQrPayment() async {
     final app = AppScope.of(context, listen: false);
     final tier = app.session!.tier;
     setState(() {
       _state = _LivePaymentState.creating;
       _errorMessage = null;
-      _source = null;
+      _errorDetails = null;
+      _payment = null;
     });
     try {
-      final source = await _paymongo.createGcashSource(
+      final payment = await _paymongo.createQrPhPayment(
         amountCentavos: tier.price * 100,
         description: 'SkyeLoop ${tier.title} (${tier.priceLabel})',
       );
       if (!mounted) return;
       setState(() {
-        _source = source;
-        _state = _LivePaymentState.waiting;
+        _payment = payment;
+        _state = payment.hasQrImage
+            ? _LivePaymentState.waiting
+            : _LivePaymentState.error;
+        if (!payment.hasQrImage) {
+          _errorMessage = 'PayMongo did not return a QR code. Try again.';
+        }
       });
-      _startPolling(source.id);
+      if (payment.hasQrImage) {
+        _startPolling(payment.intentId);
+      }
+    } on PaymongoException catch (error) {
+      debugPrint('PayMongo error: $error');
+      if (!mounted) return;
+      setState(() {
+        _state = _LivePaymentState.error;
+        _errorMessage = error.message;
+        _errorDetails = error.details;
+      });
     } catch (error) {
+      debugPrint('Payment network error: $error');
       if (!mounted) return;
       setState(() {
         _state = _LivePaymentState.error;
@@ -69,26 +86,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
-  void _startPolling(String sourceId) {
+  void _startPolling(String intentId) {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       try {
-        final source = await _paymongo.retrieveSource(sourceId);
+        final payment = await _paymongo.retrievePayment(intentId);
         if (!mounted) {
           timer.cancel();
           return;
         }
-        setState(() => _source = source);
-        if (source.isChargeable) {
+        setState(() => _payment = payment);
+        if (payment.isSucceeded) {
           timer.cancel();
           setState(() => _state = _LivePaymentState.paid);
-        } else if (source.isFailed) {
-          timer.cancel();
-          setState(() => _state = _LivePaymentState.failed);
         }
-      } catch (_) {
-        // Transient network errors: keep polling; the kiosk stays in the
-        // "waiting" state until the source resolves.
+      } catch (error) {
+        // Transient errors: keep polling; the kiosk stays in the "waiting"
+        // state until the payment intent resolves.
+        debugPrint('PayMongo poll error: $error');
       }
     });
   }
@@ -108,8 +123,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     final subtitle = testMode
         ? 'Test mode is on: payment is bypassed for camera and preview testing.'
-        : 'Scan the GCash QR below with your phone camera, pay with GCash, and '
-            'the session starts automatically once payment is confirmed.';
+        : 'Scan the QR Ph code below with any bank or e-wallet app (GCash, Maya, '
+            'and more). The session starts automatically once payment is confirmed.';
 
     return PopScope(
       canPop: false,
@@ -135,9 +150,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       else
                         _LiveModeBody(
                           state: _state,
-                          source: _source,
+                          payment: _payment,
                           errorMessage: _errorMessage,
-                          onRetry: _createSource,
+                          errorDetails: _errorDetails,
+                          onRetry: _createQrPayment,
                           onProceed: _proceedToCapture,
                         ),
                     ],
@@ -152,7 +168,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 /// Test-mode payment card: skips PayMongo entirely so the kiosk camera and
-/// image preview can be exercised without a real GCash payment.
+/// image preview can be exercised without a real payment.
 class _TestModeBody extends StatelessWidget {
   const _TestModeBody({required this.onProceed});
 
@@ -197,20 +213,22 @@ class _TestModeBody extends StatelessWidget {
 }
 
 
-/// Live-mode payment card: generates a GCash QR through PayMongo and only
-/// unlocks the session once the source status becomes `chargeable`.
+/// Live-mode payment card: generates a dynamic QR Ph code through PayMongo
+/// and only unlocks the session once the payment intent is `succeeded`.
 class _LiveModeBody extends StatelessWidget {
   const _LiveModeBody({
     required this.state,
-    required this.source,
+    required this.payment,
     required this.errorMessage,
+    required this.errorDetails,
     required this.onRetry,
     required this.onProceed,
   });
 
   final _LivePaymentState state;
-  final PaymongoSource? source;
+  final PaymongoQrPayment? payment;
   final String? errorMessage;
+  final String? errorDetails;
   final VoidCallback onRetry;
   final VoidCallback onProceed;
 
@@ -236,7 +254,6 @@ class _LiveModeBody extends StatelessWidget {
   }
 
   Widget _buildQrArea() {
-    final checkoutUrl = source?.checkoutUrl;
     if (state == _LivePaymentState.paid) {
       return const Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -254,7 +271,7 @@ class _LiveModeBody extends StatelessWidget {
         children: [
           CircularProgressIndicator(color: SkyeColors.blue),
           SizedBox(height: 16),
-          Text('Generating your GCash QR...'),
+          Text('Generating your QR Ph code...'),
         ],
       );
     }
@@ -271,6 +288,15 @@ class _LiveModeBody extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+          if (errorDetails != null && errorDetails!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                errorDetails!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ),
           const SizedBox(height: 16),
           FilledButton.tonalIcon(
             onPressed: onRetry,
@@ -280,29 +306,40 @@ class _LiveModeBody extends StatelessWidget {
         ],
       );
     }
-    if (checkoutUrl == null || checkoutUrl.isEmpty) {
-      return const Column(
+    final qrBytes = payment?.qrImageBytes;
+    if (qrBytes == null || qrBytes.isEmpty) {
+      return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 100, color: SkyeColors.rose),
-          SizedBox(height: 10),
-          Padding(
+          const Icon(Icons.error_outline, size: 100, color: SkyeColors.rose),
+          const SizedBox(height: 10),
+          const Padding(
             padding: EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              'PayMongo did not return a checkout URL. Try again.',
+              'PayMongo did not return a QR code. Try again.',
               textAlign: TextAlign.center,
             ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.tonalIcon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Generate a new QR'),
           ),
         ],
       );
     }
+    // The QR Ph code comes ready-made from PayMongo as a PNG image.
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: QrImageView(
-        data: checkoutUrl,
-        version: QrVersions.auto,
-        size: 320,
-        backgroundColor: Colors.white,
+      child: Image.memory(
+        qrBytes,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.broken_image_outlined,
+          size: 90,
+          color: SkyeColors.rose,
+        ),
       ),
     );
   }
@@ -370,7 +407,7 @@ class _LiveModeBody extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               SizedBox(width: 12),
-              Text('Preparing the GCash QR...'),
+              Text('Preparing the QR Ph code...'),
             ],
           ),
         ];
@@ -388,9 +425,9 @@ class _LiveModeBody extends StatelessWidget {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Open your phone camera or the GCash app, scan this QR, '
-                    'and pay. This screen unlocks automatically once PayMongo '
-                    'confirms your payment.',
+                    'Open any bank or e-wallet app (GCash, Maya, and more), '
+                    'scan this QR Ph code, and pay. This screen unlocks '
+                    'automatically once PayMongo confirms your payment.',
                   ),
                 ),
               ],
