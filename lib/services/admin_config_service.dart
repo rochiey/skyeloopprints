@@ -25,6 +25,7 @@ class AdminConfigService {
   static const _maxCopiesSingleKey = 'max_copies_single';
   static const _maxCopiesStripKey = 'max_copies_strip';
   static const _maxCopiesGridKey = 'max_copies_grid';
+  static const _printDarknessKey = 'print_darkness';
 
   late SharedPreferences _preferences;
 
@@ -48,6 +49,7 @@ class AdminConfigService {
       maxCopiesSingle: _preferences.getInt(_maxCopiesSingleKey) ?? 1,
       maxCopiesStrip: _preferences.getInt(_maxCopiesStripKey) ?? 3,
       maxCopiesGrid: _preferences.getInt(_maxCopiesGridKey) ?? 5,
+      printDarkness: _preferences.getInt(_printDarknessKey) ?? 0,
     );
   }
 
@@ -104,6 +106,13 @@ class AdminConfigService {
       PricingTier.grid => _maxCopiesGridKey,
     };
     await _preferences.setInt(key, value.clamp(1, 99));
+  }
+
+  /// Persists the print output darkness adjustment. Values outside the
+  /// -5 (lightest) .. 5 (darkest) range are clamped; 0 is the pipeline's
+  /// built-in default output.
+  Future<void> setPrintDarkness(int value) async {
+    await _preferences.setInt(_printDarknessKey, value.clamp(-5, 5));
   }
 
   Future<void> setPrinter({required String address, required String name}) async {

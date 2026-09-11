@@ -36,6 +36,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
         pngBytes: session.flattenedImage!,
         copies: session.copies,
         printerAddress: app.config.printerAddress,
+        darkness: app.config.printDarkness,
       );
       if (mounted) setState(() => _state = _PrintState.complete);
     } catch (error) {

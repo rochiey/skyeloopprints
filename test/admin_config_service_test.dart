@@ -75,4 +75,37 @@ void main() {
     await service.setMaxCopies(tier: PricingTier.strip, value: 250);
     expect(service.load().maxCopiesFor(PricingTier.strip), 99);
   });
+
+  test('print output darkness defaults to the pipeline default', () async {
+    final service = AdminConfigService();
+    await service.initialize();
+
+    expect(service.load().printDarkness, 0);
+  });
+
+  test('saves and loads print output darkness', () async {
+    final service = AdminConfigService();
+    await service.initialize();
+
+    await service.setPrintDarkness(3);
+    expect(service.load().printDarkness, 3);
+
+    await service.setPrintDarkness(-2);
+    expect(service.load().printDarkness, -2);
+
+    // 0 restores the pipeline's built-in default output.
+    await service.setPrintDarkness(0);
+    expect(service.load().printDarkness, 0);
+  });
+
+  test('print output darkness is clamped to -5..5', () async {
+    final service = AdminConfigService();
+    await service.initialize();
+
+    await service.setPrintDarkness(-9);
+    expect(service.load().printDarkness, -5);
+
+    await service.setPrintDarkness(9);
+    expect(service.load().printDarkness, 5);
+  });
 }

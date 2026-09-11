@@ -9,6 +9,7 @@ import '../../services/printer_service.dart';
 import '../../theme/skyeloop_theme.dart';
 import '../../widgets/brand_mark.dart';
 import '../production/tap_to_start_screen.dart';
+import 'printer_test_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -139,6 +140,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } on PlatformException catch (error) {
       _message(error.message ?? 'Could not read paired Bluetooth devices.');
     }
+  }
+
+  Future<void> _setPrintDarkness(int value) async {
+    final app = AppScope.of(context, listen: false);
+    await app.configService.setPrintDarkness(value.clamp(-5, 5));
+    app.refreshConfig();
+  }
+
+  Future<void> _resetPrintDarkness() async {
+    await _setPrintDarkness(0);
+    _message('Print output darkness reset to the default.');
+  }
+
+  Future<void> _openPrinterTest() async {
+    final app = AppScope.of(context, listen: false);
+    if (await app.printerService.isEmulator) {
+      _message(
+        'The emulator uses a simulated printer. Run this test on the tablet '
+        'with the real printer to judge the result on paper.',
+      );
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PrinterTestScreen(darkness: app.config.printDarkness),
+      ),
+    );
   }
 
   Future<void> _changePassword() async {
@@ -397,6 +425,76 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         : '${config.printerName}\n${config.printerAddress}'),
                     isThreeLine: config.printerName != null,
                     trailing: FilledButton.tonal(onPressed: _choosePrinter, child: const Text('Choose paired device')),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Print output darkness',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 6),
+                        const Text(
+                            'Make the printed photo a little lighter or darker '
+                            'to suit the room\'s lighting. The default is the '
+                            'same output the kiosk has always used.'),
+                        const SizedBox(height: 4),
+                        Slider(
+                          value: config.printDarkness.toDouble(),
+                          min: -5,
+                          max: 5,
+                          divisions: 10,
+                          label: printDarknessLabel(config.printDarkness),
+                          onChanged: (value) => _setPrintDarkness(value.round()),
+                        ),
+                        const Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Lighter', style: TextStyle(fontSize: 12)),
+                            Text('Default',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                            Text('Darker', style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Current: ${printDarknessLabel(config.printDarkness)}',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: SkyeColors.ink.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                            OutlinedButton(
+                              onPressed: config.printDarkness == 0 ? null : _resetPrintDarkness,
+                              child: const Text('Reset to default'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        const SizedBox(height: 4),
+                        const Text(
+                            'Test the setting on real paper: take a photo with '
+                            'the camera and it prints right away. If the printer '
+                            'is not connected yet, the test screen explains how '
+                            'to prepare it.'),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: _busy ? null : _openPrinterTest,
+                            icon: const Icon(Icons.photo_camera_outlined),
+                            label: const Text('Test print'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),

@@ -38,6 +38,7 @@ class PrinterService {
     required Uint8List pngBytes,
     required int copies,
     required String? printerAddress,
+    int darkness = 0,
   }) async {
     if (await isEmulator) {
       await Future<void>.delayed(const Duration(seconds: 2));
@@ -50,6 +51,7 @@ class PrinterService {
       'pngBytes': pngBytes,
       'copies': copies,
       'address': printerAddress,
+      'darkness': darkness,
     });
   }
 

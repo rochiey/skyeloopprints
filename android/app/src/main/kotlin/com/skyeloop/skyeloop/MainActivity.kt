@@ -51,12 +51,13 @@ class MainActivity : FlutterActivity() {
                         val pngBytes = call.argument<ByteArray>("pngBytes")
                         val address = call.argument<String>("address")
                         val copies = call.argument<Int>("copies") ?: 1
+                        val darkness = (call.argument<Int>("darkness") ?: 0).coerceIn(MIN_DARKNESS, MAX_DARKNESS)
                         if (pngBytes == null || address.isNullOrBlank()) {
                             result.error("INVALID_JOB", "The print image or printer address is missing.", null)
                         } else {
                             // The copy count is controlled by the admin copies
                             // limit; only guard against absurd/unset values.
-                            printImage(address, pngBytes, copies.coerceIn(1, 10), result)
+                            printImage(address, pngBytes, copies.coerceIn(1, 10), darkness, result)
                         }
                     }
                     else -> result.notImplemented()
@@ -84,6 +85,7 @@ class MainActivity : FlutterActivity() {
         address: String,
         pngBytes: ByteArray,
         copies: Int,
+        darkness: Int,
         result: MethodChannel.Result,
     ) {
         if (!hasBluetoothConnectPermission()) {
@@ -94,7 +96,7 @@ class MainActivity : FlutterActivity() {
             try {
                 val bitmap = BitmapFactory.decodeByteArray(pngBytes, 0, pngBytes.size)
                     ?: throw IllegalArgumentException("The prepared print image is invalid.")
-                val escPos = bitmapToEscPos(bitmap)
+                val escPos = bitmapToEscPos(bitmap, darkness)
                 var lastError: Exception? = null
                 for (attempt in 0..1) {
                     try {
@@ -232,7 +234,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun bitmapToEscPos(source: Bitmap): ByteArray {
+    private fun bitmapToEscPos(source: Bitmap, darkness: Int): ByteArray {
         val targetWidth = PRINT_DOTS_WIDE
         val targetHeight = (source.height * (targetWidth.toDouble() / source.width))
             .roundToInt()
@@ -298,13 +300,17 @@ class MainActivity : FlutterActivity() {
         // Atkinson error diffusion: 1/8 of the error is pushed to six neighbors
         // (3/4 total diffused). It prints visibly lighter than Floyd–Steinberg with
         // open highlights and fine texture — the classic choice for 1-bit photos.
+        // The admin darkness toggle shifts the quantization point: a higher
+        // threshold prints more tones as black (darker output), a lower one
+        // leaves more tones as paper (lighter output).
+        val ditherThreshold = PRINT_THRESHOLD + darkness * DARKNESS_THRESHOLD_STEP
         val errors = FloatArray(targetWidth * targetHeight)
         for (y in 0 until targetHeight) {
             for (x in 0 until targetWidth) {
                 val idx = y * targetWidth + x
                 var value = luma[idx] + errors[idx]
                 if (value >= 255f) value = 255f
-                val black = value < PRINT_THRESHOLD
+                val black = value < ditherThreshold
                 if (black) dithered[idx] = 1
                 val quantError = value - if (black) 0f else 255f
                 val eighth = quantError / 8f
@@ -415,6 +421,18 @@ class MainActivity : FlutterActivity() {
 
         /** Dithering threshold: pixels darker than this print as black. */
         private const val PRINT_THRESHOLD = 128f
+
+        /**
+         * Threshold shift per darkness step from the admin print output toggle.
+         * Each step moves the quantization point by this many output levels, so
+         * +5 prints noticeably darker and -5 noticeably lighter than the default
+         * threshold above (0 steps = exactly the default output).
+         */
+        private const val DARKNESS_THRESHOLD_STEP = 14f
+
+        /** Admin darkness range: -5 (lightest) .. 5 (darkest), 0 = the default output. */
+        private const val MIN_DARKNESS = -5
+        private const val MAX_DARKNESS = 5
 
         /** Local-contrast sharpen amount applied to luminance before dithering (0 = off). */
         private const val PRINT_SHARPEN = 0.3f

@@ -11,6 +11,7 @@ class AdminConfig {
     this.maxCopiesSingle = 1,
     this.maxCopiesStrip = 3,
     this.maxCopiesGrid = 5,
+    this.printDarkness = 0,
   });
 
   final String venueName;
@@ -29,6 +30,11 @@ class AdminConfig {
   final int maxCopiesStrip;
   final int maxCopiesGrid;
 
+  /// Print output darkness selected in Admin: -5 prints the lightest, 5 the
+  /// darkest, and 0 leaves the print pipeline's built-in default output
+  /// (the same result the kiosk has always produced).
+  final int printDarkness;
+
   AdminConfig copyWith({
     String? venueName,
     String? brandingPath,
@@ -39,6 +45,7 @@ class AdminConfig {
     int? maxCopiesSingle,
     int? maxCopiesStrip,
     int? maxCopiesGrid,
+    int? printDarkness,
     bool clearPrinter = false,
   }) {
     return AdminConfig(
@@ -51,6 +58,7 @@ class AdminConfig {
       maxCopiesSingle: maxCopiesSingle ?? this.maxCopiesSingle,
       maxCopiesStrip: maxCopiesStrip ?? this.maxCopiesStrip,
       maxCopiesGrid: maxCopiesGrid ?? this.maxCopiesGrid,
+      printDarkness: printDarkness ?? this.printDarkness,
     );
   }
 
