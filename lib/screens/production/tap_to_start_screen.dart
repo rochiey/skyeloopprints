@@ -14,10 +14,16 @@ class TapToStartScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
     // The logo is the hero of the start screen, so it takes most of the width
     // on a tablet. The page scrolls, and the column below caps at 640 px, so a
     // tall logo can never overflow.
     final brandSize = (screenWidth * 0.62).clamp(200.0, 560.0);
+    // An uploaded logo is not cropped into a circle: it gets the full box and
+    // is scaled to fill it at its own aspect ratio, so the client's artwork is
+    // shown as large as the screen allows.
+    final brandWidth = (screenWidth * 0.78).clamp(220.0, 620.0);
+    final brandHeight = (screenHeight * 0.62).clamp(220.0, 760.0);
     final titleSize = (screenWidth * 0.07).clamp(28.0, 50.0);
     return PopScope(
       canPop: false,
@@ -42,7 +48,12 @@ class TapToStartScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    BrandMark(imagePath: controller.config.brandingPath, size: brandSize),
+                    BrandMark(
+                      imagePath: controller.config.brandingPath,
+                      size: brandSize,
+                      maxWidth: brandWidth,
+                      maxHeight: brandHeight,
+                    ),
                     const SizedBox(height: 24),
                     Text(
                       controller.config.venueName,

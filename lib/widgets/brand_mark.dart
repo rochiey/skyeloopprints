@@ -5,22 +5,38 @@ import 'package:flutter/material.dart';
 import '../theme/skyeloop_theme.dart';
 
 class BrandMark extends StatelessWidget {
-  const BrandMark({this.imagePath, this.size = 230, super.key});
+  const BrandMark({
+    this.imagePath,
+    this.size = 230,
+    this.maxWidth,
+    this.maxHeight,
+    super.key,
+  });
 
   final String? imagePath;
+
+  /// Diameter of the built-in mark. Also the default size of the box an
+  /// uploaded logo may fill when [maxWidth]/[maxHeight] are not given.
   final double size;
+
+  /// Box the client's uploaded artwork may use. Defaults to a [size] square.
+  final double? maxWidth;
+  final double? maxHeight;
 
   @override
   Widget build(BuildContext context) {
     final path = imagePath;
     if (path != null && File(path).existsSync()) {
-      return ClipOval(
+      // The client's own artwork is shown whole: no circular crop, scaled to
+      // fill as much of the given box as its own aspect ratio allows, so a
+      // large logo is never shrunk to a circle again.
+      return SizedBox(
+        width: maxWidth ?? size,
+        height: maxHeight ?? size,
         child: Image.file(
           File(path),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _BuiltInMark(size: size),
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Center(child: _BuiltInMark(size: size)),
         ),
       );
     }
