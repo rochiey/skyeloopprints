@@ -6,10 +6,13 @@ import 'package:flutter/rendering.dart';
 
 import '../../app.dart';
 import '../../models/editor_item.dart';
+import '../../models/pricing_tier.dart';
+import '../../models/print_border.dart';
 import '../../models/stickers.dart';
 import '../../theme/skyeloop_theme.dart';
 import '../../widgets/kiosk_shell.dart';
 import '../../widgets/photo_composition.dart';
+import '../../widgets/print_border_frame.dart';
 import '../../widgets/screen_heading.dart';
 import 'printing_screen.dart';
 
@@ -187,6 +190,99 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
     });
   }
 
+  /// Opens the frame picker. Only frames designed for the session's layout are
+  /// offered: a film-strip rail makes no sense around one photo, and a poster
+  /// banner makes no sense split across four.
+  Future<void> _chooseBorder() async {
+    final session = AppScope.of(context, listen: false).session!;
+    final borders = bordersForLayout(session.tier.layout);
+    final noun = switch (session.tier.layout) {
+      LayoutType.single => 'your photo',
+      LayoutType.strip => 'all three photos',
+      LayoutType.grid => 'all four photos',
+    };
+    final picked = await showModalBottomSheet<PrintBorderId>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: 470,
+          child: Column(
+            children: [
+              Text('Pick a frame', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'One frame wraps $noun. Frames print in black and white, '
+                  'like the rest of your photo.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.black.withValues(alpha: .6)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 168,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: .76,
+                  ),
+                  itemCount: borders.length,
+                  itemBuilder: (context, index) {
+                    final spec = borders[index];
+                    final selected = session.border == spec.id;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => Navigator.pop(context, spec.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: selected
+                                ? SkyeColors.blue
+                                : Colors.black.withValues(alpha: .14),
+                            width: selected ? 3 : 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Expanded(child: _BorderPreview(tier: session.tier, spec: spec)),
+                            const SizedBox(height: 6),
+                            Text(spec.label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                            Text(spec.blurb,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    height: 1.2,
+                                    color: Colors.black.withValues(alpha: .55))),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => session.border = picked);
+  }
+
   Future<void> _exportAndPrint() async {
     final app = AppScope.of(context, listen: false);
     final session = app.session!;
@@ -297,6 +393,8 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                               icon: const Icon(Icons.text_fields), label: const Text('Add text')),
                           FilledButton.tonalIcon(onPressed: _addSticker,
                               icon: const Icon(Icons.emoji_emotions_outlined), label: const Text('Add sticker')),
+                          FilledButton.tonalIcon(onPressed: _chooseBorder,
+                              icon: const Icon(Icons.crop_square_rounded), label: const Text('Border')),
                           OutlinedButton.icon(
                             onPressed: session.editorItems.isEmpty
                                 ? null
@@ -314,7 +412,8 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                         padding: EdgeInsets.all(16),
                         child: Text(
                             'Tip: tap a sticker or text to select it. Drag to move '
-                            'it, tap − / + to resize, or pinch with two fingers.'),
+                            'it, tap − / + to resize, or pinch with two fingers. '
+                            'Border wraps the photos in one printed frame.'),
                       ),
                     ),
                   ],
@@ -359,6 +458,9 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                       FilledButton.tonalIcon(onPressed: _addSticker,
                           icon: const Icon(Icons.emoji_emotions_outlined), label: const Text('Add sticker')),
                       const SizedBox(height: 12),
+                      FilledButton.tonalIcon(onPressed: _chooseBorder,
+                          icon: const Icon(Icons.crop_square_rounded), label: const Text('Border')),
+                      const SizedBox(height: 12),
                       OutlinedButton.icon(
                         onPressed: session.editorItems.isEmpty
                             ? null
@@ -373,7 +475,8 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                           padding: EdgeInsets.all(16),
                           child: Text(
                               'Tip: tap a sticker or text to select it. Drag to move '
-                              'it, tap − / + to resize, or pinch with two fingers.'),
+                              'it, tap − / + to resize, or pinch with two fingers. '
+                              'Border wraps the photos in one printed frame.'),
                         ),
                       ),
                     ],
@@ -386,4 +489,72 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
       ),
     );
   }
+}
+/// A live thumbnail of a frame style. The real print-size artwork is rendered
+/// and then scaled down, so the picker shows exactly what will be printed.
+class _BorderPreview extends StatelessWidget {
+  const _BorderPreview({required this.tier, required this.spec});
+
+  final PricingTier tier;
+  final PrintBorder spec;
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = switch (tier.layout) {
+      LayoutType.single => const _PhotoStub(),
+      LayoutType.grid => const Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: _PhotoStub()),
+                  SizedBox(width: kGridPhotoGutter),
+                  Expanded(child: _PhotoStub()),
+                ],
+              ),
+            ),
+            SizedBox(height: kGridPhotoGutter),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: _PhotoStub()),
+                  SizedBox(width: kGridPhotoGutter),
+                  Expanded(child: _PhotoStub()),
+                ],
+              ),
+            ),
+          ],
+        ),
+      LayoutType.strip => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var index = 0; index < 3; index++) ...[
+              const AspectRatio(aspectRatio: kStripPhotoAspect, child: _PhotoStub()),
+              if (index != 2) const SizedBox(height: kStripPhotoGutter),
+            ],
+          ],
+        ),
+    };
+
+    final framed = PrintBorderFrame(border: spec.id, child: photos);
+    return FittedBox(
+      fit: BoxFit.contain,
+      child: tier.layout == LayoutType.strip
+          ? SizedBox(width: _printWidth, child: framed)
+          : SizedBox(width: _printWidth, height: _standardHeight, child: framed),
+    );
+  }
+}
+
+/// The fixed print geometry the composition uses, reused by the thumbnails so
+/// an inset of, say, 96 px still lands in the same place as it will on paper.
+const double _printWidth = 576;
+const double _standardHeight = 821;
+
+/// A grey stand-in for a photo in a frame thumbnail.
+class _PhotoStub extends StatelessWidget {
+  const _PhotoStub();
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(color: SkyeColors.mist);
 }

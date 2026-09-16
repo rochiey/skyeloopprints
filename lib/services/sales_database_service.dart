@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 
@@ -89,6 +92,13 @@ class SalesRecord {
 class SalesDatabaseService {
   static Database? _database;
 
+  /// sqflite ships no Windows/macOS/Linux implementation. The kiosk only ever
+  /// records sales on Android (`flutter build apk`), so on desktop test runs
+  /// (`flutter run -d windows`) every read and write degrades to a no-op
+  /// instead of throwing and stalling the customer flow.
+  bool get _databaseUnavailable =>
+      !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+
   Future<Database> get database async {
     _database ??= await _initDatabase();
     return _database!;
@@ -130,6 +140,11 @@ class SalesDatabaseService {
 
   /// Insert a completed session as a sales record.
   Future<void> insertSession(SalesRecord record) async {
+    if (_databaseUnavailable) {
+      debugPrint('SalesDatabase: skipped insert of ${record.sessionId} '
+          '(no sqflite on this platform).');
+      return;
+    }
     final db = await database;
     await db.insert('sessions', record.toMap(),
         conflictAlgorithm: ConflictAlgorithm.ignore);
@@ -138,6 +153,7 @@ class SalesDatabaseService {
   /// Get all sessions with pending (or failed) upload status,
   /// grouped by date ascending, oldest first.
   Future<List<SalesRecord>> getPendingSessions({bool includeFailed = true}) async {
+    if (_databaseUnavailable) return const [];
     final db = await database;
     final statuses = includeFailed
         ? ["'pending'", "'failed'"]
@@ -152,6 +168,7 @@ class SalesDatabaseService {
 
   /// Get all sessions for a specific date (YYYY-MM-DD).
   Future<List<SalesRecord>> getSessionsByDate(String date) async {
+    if (_databaseUnavailable) return const [];
     final db = await database;
     final maps = await db.query(
       'sessions',
@@ -164,6 +181,7 @@ class SalesDatabaseService {
 
   /// Mark a session as uploaded.
   Future<void> markUploaded(int id) async {
+    if (_databaseUnavailable) return;
     final db = await database;
     await db.update(
       'sessions',
@@ -180,6 +198,7 @@ class SalesDatabaseService {
 
   /// Mark a session upload as failed.
   Future<void> markFailed(int id, {String? error}) async {
+    if (_databaseUnavailable) return;
     final db = await database;
     await db.rawUpdate('''
       UPDATE sessions
@@ -192,6 +211,7 @@ class SalesDatabaseService {
 
   /// Get distinct dates that have at least one pending/failed session.
   Future<List<String>> getPendingDates() async {
+    if (_databaseUnavailable) return const [];
     final db = await database;
     final maps = await db.rawQuery('''
       SELECT DISTINCT substr(started_at, 1, 10) AS date
@@ -204,6 +224,7 @@ class SalesDatabaseService {
 
   /// Check if all sessions for a given date have been uploaded.
   Future<bool> isDateFullyUploaded(String date) async {
+    if (_databaseUnavailable) return true;
     final db = await database;
     final result = await db.rawQuery('''
       SELECT COUNT(*) AS pending
@@ -215,6 +236,7 @@ class SalesDatabaseService {
 
   /// Get total count of pending/failed sessions.
   Future<int> getPendingCount() async {
+    if (_databaseUnavailable) return 0;
     final db = await database;
     final result = await db.rawQuery(
       "SELECT COUNT(*) AS count FROM sessions WHERE upload_status IN ('pending', 'failed')",

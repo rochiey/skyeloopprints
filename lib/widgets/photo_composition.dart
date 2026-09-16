@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../models/editor_item.dart';
 import '../models/photo_session.dart';
 import '../models/pricing_tier.dart';
+import '../models/print_border.dart';
 import '../theme/skyeloop_theme.dart';
+import 'print_border_frame.dart';
 
 class PhotoComposition extends StatefulWidget {
   const PhotoComposition({
@@ -72,6 +74,17 @@ class PhotoCompositionState extends State<PhotoComposition> {
     setState(() => _selectedId = null);
   }
 
+  /// Wraps [photos] in the session's chosen frame. A plain photo, or a frame
+  /// that belongs to a different layout, is returned untouched so the print
+  /// stays exactly what it was before frames existed.
+  Widget _framed(PhotoSession session, Widget photos) {
+    final border = session.border;
+    if (border == PrintBorderId.none || !borderFitsLayout(border, session.tier.layout)) {
+      return photos;
+    }
+    return PrintBorderFrame(border: border, child: photos);
+  }
+
   @override
   Widget build(BuildContext context) {
     final date = widget.session.startedAt;
@@ -111,7 +124,7 @@ class PhotoCompositionState extends State<PhotoComposition> {
           Positioned.fill(
             top: _headerBand,
             bottom: _footerBand,
-            child: _PhotoGrid(session: widget.session),
+            child: _framed(widget.session, _PhotoGrid(session: widget.session)),
           ),
           Positioned(
             bottom: 14,
@@ -180,13 +193,24 @@ class PhotoCompositionState extends State<PhotoComposition> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                for (var index = 0; index < widget.session.photoPaths.length; index++) ...[
-                  AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: _PhotoCell(path: widget.session.photoPaths[index]),
+                _framed(
+                  widget.session,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var index = 0;
+                          index < widget.session.photoPaths.length;
+                          index++) ...[
+                        AspectRatio(
+                          aspectRatio: kStripPhotoAspect,
+                          child: _PhotoCell(path: widget.session.photoPaths[index]),
+                        ),
+                        if (index != widget.session.photoPaths.length - 1)
+                          const SizedBox(height: kStripPhotoGutter),
+                      ],
+                    ],
                   ),
-                  if (index != widget.session.photoPaths.length - 1) const SizedBox(height: 8),
-                ],
+                ),
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -242,7 +266,7 @@ class _PhotoGrid extends StatelessWidget {
         children: [
           for (var index = 0; index < photos.length; index++) ...[
             Expanded(child: _PhotoCell(path: photos[index])),
-            if (index != photos.length - 1) const SizedBox(height: 8),
+            if (index != photos.length - 1) const SizedBox(height: kStripPhotoGutter),
           ],
         ],
       );
@@ -253,17 +277,17 @@ class _PhotoGrid extends StatelessWidget {
           child: Row(
             children: [
               Expanded(child: _PhotoCell(path: photos[0])),
-              const SizedBox(width: 8),
+              const SizedBox(width: kGridPhotoGutter),
               Expanded(child: _PhotoCell(path: photos[1])),
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: kGridPhotoGutter),
         Expanded(
           child: Row(
             children: [
               Expanded(child: _PhotoCell(path: photos[2])),
-              const SizedBox(width: 8),
+              const SizedBox(width: kGridPhotoGutter),
               Expanded(child: _PhotoCell(path: photos[3])),
             ],
           ),

@@ -14,7 +14,10 @@ class TapToStartScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
-    final brandSize = (screenWidth * 0.4).clamp(140.0, 280.0);
+    // The logo is the hero of the start screen, so it takes most of the width
+    // on a tablet. The page scrolls, and the column below caps at 640 px, so a
+    // tall logo can never overflow.
+    final brandSize = (screenWidth * 0.62).clamp(200.0, 560.0);
     final titleSize = (screenWidth * 0.07).clamp(28.0, 50.0);
     return PopScope(
       canPop: false,

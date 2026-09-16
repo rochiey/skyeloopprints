@@ -13,6 +13,27 @@ internet access. For unattended use, a small dedicated router is more reliable
 than an Android hotspot. The Digital Copy screen reports when no reachable LAN
 address is available.
 
+## Photo frames
+
+The editor's **Border** button wraps the finished photo(s) in a single printed
+frame. Frames are vector art in solid black on white, and they are grouped by
+layout, so the picker only ever offers what suits the session:
+
+- **One photo:** wanted poster, music player, polaroid, airplane ticket,
+  postage stamp, magazine cover, arcade screen, passport stamp.
+- **Three-photo strip:** film strip, film rails, photo booth strip, comic strip,
+  polaroid stack, receipt roll, stamp sheet.
+- **Four-photo grid:** comic panels, contact sheet, photo booth sheet, polaroid
+  collage, CCTV wall, yearbook page, ticket quartet, stamp block.
+
+The frames are rendered into the exported composition, so they appear in both
+the print and the digital copy. The print pipeline reduces the composition to a
+1-bit halftone at 576 dots wide (see `MainActivity.kt`), so every frame uses
+strokes of at least 3 px and text of at least 16 px in pure black: thinner or
+grey artwork is lifted by the print tone curve and dithers away into a broken
+dotted line. "No frame" draws nothing at all, leaving the original output
+untouched.
+
 ## Hardware notes
 
 - Emulator mode can use mock photos and a simulated printer.
