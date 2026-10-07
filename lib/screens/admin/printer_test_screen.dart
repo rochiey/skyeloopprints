@@ -185,8 +185,10 @@ class _PrinterTestScreenState extends State<PrinterTestScreen>
 
   Future<void> _printBytes(Uint8List bytes) async {
     final app = AppScope.of(context, listen: false);
+    final headerBytes = await app.preparePreprintHeader(darkness: widget.darkness);
     await app.printerService.printImage(
       pngBytes: bytes,
+      headerBytes: headerBytes,
       copies: 1,
       printerAddress: app.config.printerAddress,
       darkness: widget.darkness,

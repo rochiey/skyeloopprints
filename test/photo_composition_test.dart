@@ -39,7 +39,10 @@ void main() {
         .where((cell) => cell.aspectRatio == 4 / 3)
         .toList();
     expect(cells, hasLength(3));
-    expect(find.text('SKYE LOOP VENDO'), findsOneWidget);
+    // The cafe name is NOT part of the composition any more: the printer
+    // pre-prints it into the gap between its printhead and its cutter, so it is
+    // already on the paper before this composition is printed.
+    expect(find.text('SKYE LOOP VENDO'), findsNothing);
     expect(find.text('SkyeLoop'), findsOneWidget);
   });
 
@@ -68,7 +71,10 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('SKYE LOOP VENDO'), findsOneWidget);
+    // The cafe name is NOT part of the composition any more: the printer
+    // pre-prints it into the gap between its printhead and its cutter, so it is
+    // already on the paper before this composition is printed.
+    expect(find.text('SKYE LOOP VENDO'), findsNothing);
     expect(find.text('SkyeLoop'), findsOneWidget);
   });
 }

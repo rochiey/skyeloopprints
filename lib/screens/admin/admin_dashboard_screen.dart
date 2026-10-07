@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../app.dart';
 import '../../models/pricing_tier.dart';
 import '../../models/upload_config.dart';
+import '../../services/preprint_band_renderer.dart';
 import '../../services/printer_service.dart';
 import '../../theme/skyeloop_theme.dart';
 import '../../widgets/brand_mark.dart';
@@ -27,6 +28,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _uploadingNow = false;
   String _uploadStatus = '';
 
+  /// The cafe-name band the printer pre-prints into the gap between its
+  /// printhead and its cutter, rendered so the admin can check the spelling
+  /// that will end up on the next strip.
+  Uint8List? _bandPreview;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +43,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _uploadTokenController = TextEditingController(text: _uploadConfig.apiToken);
     _uploadStatus = app.uploadSchedulerService!.lastStatus;
     app.uploadSchedulerService!.addListener(_onSchedulerUpdate);
+    _refreshBandPreview();
+  }
+
+  Future<void> _refreshBandPreview() async {
+    final app = AppScope.of(context, listen: false);
+    final bytes = await app.preprintBandRenderer.headerBand(venueName: app.config.venueName);
+    if (!mounted) return;
+    setState(() => _bandPreview = bytes);
+  }
+
+  Future<void> _runMaintenancePrint() async {
+    final app = AppScope.of(context, listen: false);
+    if (await app.printerService.isEmulator) {
+      _message('The emulator uses SkyeLoop\'s simulated printer. Run this on the '
+          'tablet with the real printer to load the pre-printed header.');
+      return;
+    }
+    if (!mounted) return;
+    await _withBusy(() async {
+      try {
+        await app.runMaintenancePrint();
+        _message('Maintenance print sent. The next strip already carries the cafe name.');
+      } catch (error) {
+        _message(error.toString().replaceFirst('Bad state: ', ''));
+      }
+    });
   }
 
   void _onSchedulerUpdate() {
@@ -62,7 +94,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final app = AppScope.of(context, listen: false);
     await app.configService.setVenueName(_venueController.text);
     app.refreshConfig();
-    _message('Venue name saved.');
+    await _refreshBandPreview();
+    _message('Venue name saved. Run a maintenance print to load it for the next strip.');
   }
 
   Future<void> _pickBranding() async {
@@ -425,6 +458,60 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         : '${config.printerName}\n${config.printerAddress}'),
                     isThreeLine: config.printerName != null,
                     trailing: FilledButton.tonal(onPressed: _choosePrinter, child: const Text('Choose paired device')),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Pre-printed cafe name',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 6),
+                        const Text(
+                            'The printer cannot print the last 40 mm of a job: that paper is '
+                            'still between its printhead and its cutter. Every print now ends '
+                            'by printing the cafe name into that gap, so the NEXT strip comes '
+                            'out with its header already on it instead of a blank gap.'),
+                        const SizedBox(height: 6),
+                        const Text(
+                            'Because of that, the next strip is only correct if the printer '
+                            'already holds a band. Load one with a maintenance print after '
+                            'loading a fresh roll, and the first print of the day loads it '
+                            'automatically.'),
+                        const SizedBox(height: 14),
+                        const Text('Band loaded for the next strip:',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        if (_bandPreview != null)
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: SkyeColors.ink.withValues(alpha: .25)),
+                            ),
+                            child: Image.memory(
+                              _bandPreview!,
+                              width: 288,
+                              height: 288 * PreprintBandRenderer.gapDots /
+                                  PreprintBandRenderer.printDotsWide,
+                              fit: BoxFit.fill,
+                              gaplessPlayback: true,
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 20, width: 20, child: CircularProgressIndicator()),
+                        const SizedBox(height: 14),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: _busy ? null : _runMaintenancePrint,
+                            icon: const Icon(Icons.print_outlined),
+                            label: const Text('Maintenance print'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),

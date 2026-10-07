@@ -32,8 +32,13 @@ class _PrintingScreenState extends State<PrintingScreen> {
     final app = AppScope.of(context, listen: false);
     final session = app.session!;
     try {
+      // The printer pre-prints the cafe name into its printhead-to-cutter gap;
+      // the band is handed over with the job so the NEXT strip comes out with
+      // its header already on it.
+      final headerBytes = await app.preparePreprintHeader();
       await app.printerService.printImage(
         pngBytes: session.flattenedImage!,
+        headerBytes: headerBytes,
         copies: session.copies,
         printerAddress: app.config.printerAddress,
         darkness: app.config.printDarkness,

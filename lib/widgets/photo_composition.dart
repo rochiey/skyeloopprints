@@ -14,15 +14,13 @@ class PhotoComposition extends StatefulWidget {
     super.key,
     required this.session,
     required this.onChanged,
-    this.venueName = 'Skye Loop Vendo',
     this.interactive = true,
   });
 
   final PhotoSession session;
   final VoidCallback onChanged;
 
-  /// The cafe / venue name shown as the header above the photo.
-  final String venueName;
+  /// Whether tapping/dragging editor items is enabled.
   final bool interactive;
 
   @override
@@ -36,19 +34,9 @@ class PhotoCompositionState extends State<PhotoComposition> {
   static const double _standardHeight = 821; // single/grid: portrait photo area (~4:5)
   static const double _stripHeight = 1385; // 3 photos stacked at 4:3
 
-  /// Fixed header band: room for the cafe name at 5 mm (single line of 40 px).
-  static const double _headerBand = 72;
   /// Fixed footer band holding the brand + date.
   static const double _footerBand = 56;
 
-  static const TextStyle _headerStyle = TextStyle(
-    fontFamily: 'Poppins',
-    color: SkyeColors.ink,
-    fontSize: 40,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 1.5,
-    height: 1.1,
-  );
   static const TextStyle _footerStyle = TextStyle(
     fontFamily: 'Poppins',
     color: SkyeColors.ink,
@@ -103,26 +91,10 @@ class PhotoCompositionState extends State<PhotoComposition> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: _headerBand,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  widget.venueName.toUpperCase(),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _headerStyle,
-                ),
-              ),
-            ),
-          ),
+          // No header is drawn at the top of the composition any more: the
+          // printer pre-prints the cafe name into the printhead-to-cutter gap,
+          // so the strip already carries it by the time this is printed.
           Positioned.fill(
-            top: _headerBand,
             bottom: _footerBand,
             child: _framed(widget.session, _PhotoGrid(session: widget.session)),
           ),
@@ -161,8 +133,8 @@ class PhotoCompositionState extends State<PhotoComposition> {
     );
   }
 
-  /// Three-photo strip: cafe name, then 3 landscape 4:3 photos stacked
-  /// vertically, then the footer.
+  /// Three-photo strip: 3 landscape 4:3 photos stacked vertically, then the
+  /// footer. The cafe name above them is pre-printed by the printer.
   Widget _buildStrip(BuildContext context, String dateLabel) {
     return Container(
       width: _printWidth,
@@ -177,22 +149,8 @@ class PhotoCompositionState extends State<PhotoComposition> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
-                SizedBox(
-                  height: _headerBand,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        widget.venueName.toUpperCase(),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _headerStyle,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                // The cafe name is pre-printed by the printer, above this
+                // composition, so it is not drawn here.
                 _framed(
                   widget.session,
                   Column(

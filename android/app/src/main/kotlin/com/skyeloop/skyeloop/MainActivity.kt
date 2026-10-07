@@ -17,6 +17,7 @@ import android.os.Looper
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.util.UUID
@@ -57,7 +58,35 @@ class MainActivity : FlutterActivity() {
                         } else {
                             // The copy count is controlled by the admin copies
                             // limit; only guard against absurd/unset values.
-                            printImage(address, pngBytes, copies.coerceIn(1, 10), darkness, result)
+                            printJob(
+                                address = address,
+                                contentBytes = pngBytes,
+                                headerBytes = call.argument<ByteArray>("headerBytes"),
+                                copies = copies.coerceIn(1, 10),
+                                darkness = darkness,
+                                gapDots = requestedGapDots(call),
+                                contentLabel = "print image",
+                                result = result,
+                            )
+                        }
+                    }
+                    "primePrinter" -> {
+                        val maintenanceBytes = call.argument<ByteArray>("maintenanceBytes")
+                        val address = call.argument<String>("address")
+                        val darkness = (call.argument<Int>("darkness") ?: 0).coerceIn(MIN_DARKNESS, MAX_DARKNESS)
+                        if (maintenanceBytes == null || address.isNullOrBlank()) {
+                            result.error("INVALID_JOB", "The maintenance slip or printer address is missing.", null)
+                        } else {
+                            printJob(
+                                address = address,
+                                contentBytes = maintenanceBytes,
+                                headerBytes = call.argument<ByteArray>("headerBytes"),
+                                copies = 1,
+                                darkness = darkness,
+                                gapDots = requestedGapDots(call),
+                                contentLabel = "maintenance slip",
+                                result = result,
+                            )
                         }
                     }
                     else -> result.notImplemented()
@@ -81,11 +110,26 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun printImage(
+    /** Dot rows between the printhead and the cutter, as reported by the app. */
+    private fun requestedGapDots(call: MethodCall): Int =
+        (call.argument<Int>("gapDots") ?: DEFAULT_GAP_DOTS).coerceIn(MIN_GAP_DOTS, MAX_GAP_DOTS)
+
+    private fun decodeBitmap(bytes: ByteArray, label: String): Bitmap =
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?: throw IllegalArgumentException("The prepared $label is invalid.")
+
+    /**
+     * Sends one job: the content (a printed photo, or the maintenance slip)
+     * followed by the pre-print band.
+     */
+    private fun printJob(
         address: String,
-        pngBytes: ByteArray,
+        contentBytes: ByteArray,
+        headerBytes: ByteArray?,
         copies: Int,
         darkness: Int,
+        gapDots: Int,
+        contentLabel: String,
         result: MethodChannel.Result,
     ) {
         if (!hasBluetoothConnectPermission()) {
@@ -94,13 +138,13 @@ class MainActivity : FlutterActivity() {
         }
         ioExecutor.execute {
             try {
-                val bitmap = BitmapFactory.decodeByteArray(pngBytes, 0, pngBytes.size)
-                    ?: throw IllegalArgumentException("The prepared print image is invalid.")
-                val escPos = bitmapToEscPos(bitmap, darkness)
+                val content = decodeBitmap(contentBytes, contentLabel)
+                val contentRaster = rasterize(content, darkness, Int.MAX_VALUE, textMode = false)
+                val band = buildPreprintBand(headerBytes, darkness, gapDots)
                 var lastError: Exception? = null
                 for (attempt in 0..1) {
                     try {
-                        sendToPrinter(address, escPos, copies)
+                        sendToPrinter(address, contentRaster.bytes, band, copies)
                         lastError = null
                         break
                     } catch (error: Exception) {
@@ -122,8 +166,36 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * The bytes that close every job: the cafe-name band, then blank dot rows
+     * padding it out to the printer's full [gapDots] gap.
+     *
+     * The last [gapDots] rows of a job are still between the printhead and the
+     * cutter when the strip is fed to the cut, so no cut can ever reach them.
+     * They stay inside the printer and come back out as the TOP of the next
+     * strip, which is exactly where the header belongs. Blank rows there were
+     * the wasted gap above every print; the cafe name replaces them. The blank
+     * padding only ever covers a band shorter than the real gap, and it lands
+     * below the artwork, next to the photo.
+     *
+     * GS v 0 is the feed command this printer demonstrably honors (it drives the
+     * images) and advances exactly one dot row per raster row; blank bytes print
+     * nothing. ESC J is avoided because this printer prints its raw bytes as
+     * text instead of feeding.
+     */
+    private fun buildPreprintBand(headerBytes: ByteArray?, darkness: Int, gapDots: Int): ByteArray {
+        val output = ByteArrayOutputStream()
+        val band = headerBytes?.let {
+            rasterize(decodeBitmap(it, "pre-print band"), darkness, gapDots, textMode = true)
+        }
+        if (band != null) output.write(band.bytes)
+        val fed = band?.rows ?: 0
+        if (fed < gapDots) writeBlankRaster(output, gapDots - fed)
+        return output.toByteArray()
+    }
+
     @Suppress("MissingPermission")
-    private fun sendToPrinter(address: String, rasterBytes: ByteArray, copies: Int) {
+    private fun sendToPrinter(address: String, rasterBytes: ByteArray, bandBytes: ByteArray, copies: Int) {
         val socket = getPrinterSocket(address)
         try {
             val output = socket.outputStream
@@ -134,12 +206,9 @@ class MainActivity : FlutterActivity() {
                 output.flush()
                 Thread.sleep(350)
             }
-            // Feed a tail buffer so the complete strip clears the tear bar before
-            // the paper is cut. GS v 0 is the feed command this printer demonstrably
-            // honors (it drives the images) and advances exactly one dot row per
-            // raster row; blank bytes print nothing. ESC J is avoided because this
-            // printer prints its raw bytes as text instead of feeding.
-            writeTailFeed(output)
+            // The pre-print band fills the printhead-to-cutter gap so the strip
+            // after this one arrives with its cafe name already printed.
+            writePaced(output, bandBytes)
             output.flush()
             // Give the printer time to physically consume every byte before the
             // next job starts. If the link is torn down mid-stream, the printer is
@@ -214,12 +283,13 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Feeds [END_FEED_DOTS] dot rows of blank paper using banded GS v 0 rasters. */
-    private fun writeTailFeed(output: java.io.OutputStream) {
+    /** Appends [rows] dot rows of blank paper as banded GS v 0 rasters. */
+    private fun writeBlankRaster(output: ByteArrayOutputStream, rows: Int) {
         val bytesPerRow = PRINT_DOTS_WIDE / 8
-        var remaining = END_FEED_DOTS
+        val blank = ByteArray(bytesPerRow * RASTER_BAND_ROWS)
+        var remaining = rows
         while (remaining > 0) {
-            val bandHeight = minOf(192, remaining)
+            val bandHeight = minOf(RASTER_BAND_ROWS, remaining)
             output.write(
                 byteArrayOf(
                     0x1D, 0x76, 0x30, 0x00,
@@ -229,19 +299,34 @@ class MainActivity : FlutterActivity() {
                     ((bandHeight shr 8) and 0xFF).toByte(),
                 ),
             )
-            writePaced(output, ByteArray(bytesPerRow * bandHeight))
+            output.write(blank, 0, bytesPerRow * bandHeight)
             remaining -= bandHeight
         }
     }
 
-    private fun bitmapToEscPos(source: Bitmap, darkness: Int): ByteArray {
+    /** One image already packed as GS v 0 raster bands, plus the rows it covers. */
+    private class Raster(val bytes: ByteArray, val rows: Int)
+
+    /**
+     * Scales [source] to the printer's 576-dot line, converts it to 1-bit and
+     * packs it into GS v 0 raster bands of at most [maxRows] dot rows.
+     *
+     * [textMode] hard-thresholds instead of halftoning. The pre-print band and
+     * the maintenance slip are pure black text on white, and the photo curve's
+     * shadow-lift / ink-cap would only fringe the glyphs with diffused noise.
+     */
+    private fun rasterize(source: Bitmap, darkness: Int, maxRows: Int, textMode: Boolean): Raster {
         val targetWidth = PRINT_DOTS_WIDE
-        val targetHeight = (source.height * (targetWidth.toDouble() / source.width))
+        val scaledHeight = (source.height * (targetWidth.toDouble() / source.width))
             .roundToInt()
             .coerceAtLeast(1)
-        val bitmap = Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true)
-        val bytesPerRow = targetWidth / 8
-        val output = ByteArrayOutputStream(bytesPerRow * targetHeight + 64)
+        val targetHeight = minOf(scaledHeight, maxRows).coerceAtLeast(1)
+        val bitmap = if (source.width == targetWidth && source.height == scaledHeight) {
+            source
+        } else {
+            Bitmap.createScaledBitmap(source, targetWidth, scaledHeight, true)
+        }
+        val threshold = PRINT_THRESHOLD + darkness * DARKNESS_THRESHOLD_STEP
         val pixels = IntArray(targetWidth * targetHeight)
         bitmap.getPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight)
 
@@ -266,7 +351,7 @@ class MainActivity : FlutterActivity() {
         }
         // Optional local-contrast: a light 3×3 unsharp mask restores face detail
         // that 1-bit quantization flattens. Set PRINT_SHARPEN to 0 to disable.
-        if (PRINT_SHARPEN > 0f) {
+        if (!textMode && PRINT_SHARPEN > 0f) {
             val blurred = FloatArray(luma.size)
             for (y in 0 until targetHeight) {
                 for (x in 0 until targetWidth) {
@@ -290,6 +375,12 @@ class MainActivity : FlutterActivity() {
                 luma[i] = (luma[i] + PRINT_SHARPEN * (luma[i] - blurred[i])).coerceIn(0f, 255f)
             }
         }
+        if (textMode) {
+            for (i in luma.indices) {
+                if (luma[i] < threshold) dithered[i] = 1
+            }
+            return writeRasterBands(dithered, targetWidth, targetHeight, bitmap, source)
+        }
         // Tone curve: input levels compression, shadow-lifting gamma, output ink cap.
         for (i in luma.indices) {
             var t = (luma[i] - INPUT_BLACK_POINT) / (INPUT_WHITE_POINT - INPUT_BLACK_POINT)
@@ -303,14 +394,13 @@ class MainActivity : FlutterActivity() {
         // The admin darkness toggle shifts the quantization point: a higher
         // threshold prints more tones as black (darker output), a lower one
         // leaves more tones as paper (lighter output).
-        val ditherThreshold = PRINT_THRESHOLD + darkness * DARKNESS_THRESHOLD_STEP
         val errors = FloatArray(targetWidth * targetHeight)
         for (y in 0 until targetHeight) {
             for (x in 0 until targetWidth) {
                 val idx = y * targetWidth + x
                 var value = luma[idx] + errors[idx]
                 if (value >= 255f) value = 255f
-                val black = value < ditherThreshold
+                val black = value < threshold
                 if (black) dithered[idx] = 1
                 val quantError = value - if (black) 0f else 255f
                 val eighth = quantError / 8f
@@ -325,9 +415,22 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        return writeRasterBands(dithered, targetWidth, targetHeight, bitmap, source)
+    }
+
+    /** Packs [dithered] (1 = black) into banded GS v 0 rasters. */
+    private fun writeRasterBands(
+        dithered: ByteArray,
+        targetWidth: Int,
+        targetHeight: Int,
+        scaled: Bitmap,
+        source: Bitmap,
+    ): Raster {
+        val bytesPerRow = targetWidth / 8
+        val output = ByteArrayOutputStream(bytesPerRow * targetHeight + 64)
         var startY = 0
         while (startY < targetHeight) {
-            val bandHeight = minOf(192, targetHeight - startY)
+            val bandHeight = minOf(RASTER_BAND_ROWS, targetHeight - startY)
             output.write(
                 byteArrayOf(
                     0x1D, 0x76, 0x30, 0x00,
@@ -351,8 +454,8 @@ class MainActivity : FlutterActivity() {
             }
             startY += bandHeight
         }
-        if (bitmap !== source) bitmap.recycle()
-        return output.toByteArray()
+        if (scaled !== source) scaled.recycle()
+        return Raster(output.toByteArray(), targetHeight)
     }
 
     private fun enterKioskMode(): Boolean {
@@ -437,7 +540,17 @@ class MainActivity : FlutterActivity() {
         /** Local-contrast sharpen amount applied to luminance before dithering (0 = off). */
         private const val PRINT_SHARPEN = 0.3f
 
-        /** Blank raster rows fed after the last copy (320 rows = 40 mm at 8 dots/mm). */
-        private const val END_FEED_DOTS = 320
+        /** GS v 0 raster band height used when packing images and blank feeds. */
+        private const val RASTER_BAND_ROWS = 192
+
+        /**
+         * Fallback dot rows between the printhead and the cutter. The app sends
+         * its own value (see PreprintBandRenderer.gapDots); 320 rows = 40 mm.
+         */
+        private const val DEFAULT_GAP_DOTS = 320
+
+        /** Guard rails for the gap value that arrives from the app. */
+        private const val MIN_GAP_DOTS = 64
+        private const val MAX_GAP_DOTS = 1024
     }
 }

@@ -373,7 +373,6 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                               key: _compositionKey,
                               child: PhotoComposition(
                                 session: session,
-                                venueName: app.config.venueName,
                                 onChanged: () => setState(() {}),
                               ),
                             ),
@@ -436,7 +435,6 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
                             key: _compositionKey,
                             child: PhotoComposition(
                               session: session,
-                              venueName: app.config.venueName,
                               onChanged: () => setState(() {}),
                             ),
                           ),
