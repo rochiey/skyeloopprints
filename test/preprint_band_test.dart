@@ -119,6 +119,65 @@ void main() {
     );
   });
 
+  // The client's own name. It used to be ellipsized on the strip, which is why
+  // the cafe shortened it; it must now print whole, still on the single line the
+  // band was designed around.
+  test('a long cafe name the band can still fit prints whole on one line', () {
+    final layout = PreprintBandRenderer.masthead('The Weekend Gathering');
+    expect(layout.lines, hasLength(1));
+    expect(layout.text, 'THE WEEKEND GATHERING');
+    expect(layout.text, isNot(contains('...')));
+    expect(layout.fontSize, greaterThanOrEqualTo(PreprintBandRenderer.minimumSingleLineFontSize));
+    expect(layout.widestLine, lessThanOrEqualTo(PreprintBandRenderer.headerMaxWidth.toDouble()));
+  });
+
+  // A name that would have to be printed tiny on one line is word-wrapped
+  // instead. Nothing printed on the band can be corrected afterwards, so the
+  // name is never cut off: every word survives, on a line that fits the paper.
+  test('a name too long for one line is wrapped, never cut off', () async {
+    const name = 'The Extremely Long Riverside Coffee And Photobooth Company';
+    final layout = PreprintBandRenderer.masthead(name);
+    expect(layout.lines.length, greaterThan(1));
+    expect(layout.lines.length, lessThanOrEqualTo(PreprintBandRenderer.headerMaxLines));
+    expect(layout.text, PreprintBandRenderer.venueLabel(name));
+    expect(layout.fontSize, greaterThan(PreprintBandRenderer.minimumHeaderFontSize));
+    expect(
+      layout.height,
+      lessThanOrEqualTo(
+        PreprintBandRenderer.gapDots - 2 * PreprintBandRenderer.minimumBandMargin,
+      ),
+    );
+    for (final line in layout.lines) {
+      expect(line.contains('...'), isFalse);
+      expect(line.trim(), isNotEmpty);
+      expect(
+        PreprintBandRenderer.measureHeader(line, layout.fontSize),
+        lessThanOrEqualTo(PreprintBandRenderer.headerMaxWidth.toDouble()),
+      );
+    }
+    // Drawn: one ink block per line, and the block sits in the middle of the
+    // band rather than against either edge.
+    final groups = _inkRowGroups(await bands.headerBand(venueName: name));
+    expect(groups, hasLength(layout.lines.length));
+    final above = groups.first.$1;
+    final below = PreprintBandRenderer.gapDots -
+        groups.last.$2 +
+        PreprintBandRenderer.photoTopPadding;
+    expect((above - below).abs(), lessThan(48));
+    expect(above, greaterThan(PreprintBandRenderer.minimumBandMargin));
+    expect(below, greaterThan(0));
+  });
+
+  // One unbreakable word cannot be wrapped, so it is shrunk to the paper. It is
+  // still not ellipsized or clipped.
+  test('an unbreakable long name is shrunk, never ellipsized', () {
+    final layout = PreprintBandRenderer.masthead('Supercalifragilisticexpialidocious');
+    expect(layout.lines, hasLength(1));
+    expect(layout.text, 'SUPERCALIFRAGILISTICEXPIALIDOCIOUS');
+    expect(layout.text, isNot(contains('...')));
+    expect(layout.widestLine, lessThanOrEqualTo(PreprintBandRenderer.headerMaxWidth.toDouble()));
+  });
+
   test('the venue label is trimmed, upper-cased and never empty', () {
     expect(PreprintBandRenderer.venueLabel('  the mono strip '), 'THE MONO STRIP');
     expect(PreprintBandRenderer.venueLabel(''), 'SKYE LOOP');

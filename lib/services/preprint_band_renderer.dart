@@ -31,16 +31,40 @@ class PreprintBandRenderer {
   /// Font sizes are in printer dots, so what is drawn here is exactly what the
   /// printer puts on paper (the band is already [printDotsWide] wide).
   ///
-  /// The masthead is one line at this size; a name too wide for the paper is
-  /// shrunk until it fits rather than being split or cut off.
+  /// Short names print at this size on one line. A name that does not fit is
+  /// first shrunk; if it would have to go below [minimumSingleLineFontSize] it
+  /// is word-wrapped over up to [headerMaxLines] lines instead, so a long cafe
+  /// name is always printed whole - never split mid-word, never ellipsized.
   static const double headerBaseFontSize = 64;
   static const double _minFontSize = 24;
 
   /// Widest a masthead line may be, in printer dots.
   static const int headerMaxWidth = printDotsWide - 64;
 
-  /// Smallest size the masthead shrinks to before the name is ellipsized.
+  /// Smallest one-line size the masthead aims for. A name that would have to
+  /// go smaller is wrapped onto more lines instead of being printed tiny.
   static const double minimumHeaderFontSize = _minFontSize;
+
+  /// Below this one-line size the masthead is word-wrapped instead of printed
+  /// small. Names that still fit at or above it keep the single-line look the
+  /// band was designed around. Set it to 0 to always keep one line, or to
+  /// [headerBaseFontSize] to wrap every name that does not fit at full size.
+  static const double minimumSingleLineFontSize = 32;
+
+  /// Most lines the name may be wrapped over. The band is 40 mm tall, so a
+  /// taller block would crowd the margins the design balances against.
+  static const int headerMaxLines = 3;
+
+  /// Blank that must stay above and below the wrapped block, in dot rows.
+  static const int minimumBandMargin = 24;
+
+  /// A wrapped layout is only taken when it buys at least this much font size
+  /// over the layout before it (so a name wraps only when it really has to).
+  static const double wrapFontSizeGain = 1.15;
+
+  /// Absolute floor. Only one unbreakable word still wider than the paper at
+  /// this size can reach it, and it is shrunk, never ellipsized.
+  static const double _hardMinimumFontSize = 10;
 
   /// White space the composition prints above its first photo (the container
   /// padding in PhotoComposition). On paper it reads as part of the gap under
@@ -98,16 +122,99 @@ class PreprintBandRenderer {
     int dotsTall = gapDots,
     double marginRatio = headerMarginRatio,
   }) {
-    final label = venueLabel(venueName);
+    final layout = masthead(venueName);
     return _render(printDotsWide, dotsTall, (canvas, size) {
-      final name = _fitText(label, _headerStyle, headerMaxWidth.toDouble());
-      final nameTop = mastheadTop(
+      final top = mastheadTop(
         bandHeight: size.height,
-        nameHeight: name.height,
+        nameHeight: layout.height,
         marginRatio: marginRatio,
       );
-      name.paint(canvas, Offset((size.width - name.width) / 2, nameTop));
+      final style = _headerStyle.copyWith(fontSize: layout.fontSize);
+      for (var index = 0; index < layout.lines.length; index++) {
+        final line = _paintable(layout.lines[index], style);
+        line.paint(
+          canvas,
+          Offset((size.width - line.width) / 2, top + index * layout.lineHeight),
+        );
+      }
     });
+  }
+
+  /// The cafe name as the band prints it: [venueLabel] on one line when that is
+  /// still worth printing, otherwise word-wrapped over at most [headerMaxLines]
+  /// lines. The result is never wider than the paper and never ellipsized, so a
+  /// long venue name cannot arrive on the strip cut off.
+  static MastheadLayout masthead(String venueName) {
+    final label = venueLabel(venueName);
+    final single = _layout(
+      [label],
+      _fitFontSize(label, _headerStyle, headerMaxWidth.toDouble()),
+    );
+    // A name that still reads on one line keeps the single-line design.
+    if (single.fontSize >= minimumSingleLineFontSize) return single;
+    final words = label.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).toList();
+    var best = single;
+    for (var count = 2; count <= headerMaxLines && count <= words.length; count++) {
+      final candidate = _bestWrapped(words, count);
+      if (candidate == null) continue;
+      if (candidate.fontSize > best.fontSize * wrapFontSizeGain) best = candidate;
+    }
+    return best;
+  }
+
+  /// The best [lineCount]-line split of [words]: the one that allows the largest
+  /// single font size for the whole block, preferring the most even split when
+  /// two splits tie (that keeps the block looking like a heading, not a ragged
+  /// paragraph). Returns null when the block cannot fit the band's height.
+  static MastheadLayout? _bestWrapped(List<String> words, int lineCount) {
+    final maxWidth = headerMaxWidth.toDouble();
+    final maxBlock = gapDots - 2 * minimumBandMargin;
+    MastheadLayout? best;
+    void consider(List<String> lines) {
+      var fontSize = _headerStyle.fontSize ?? headerBaseFontSize;
+      for (final line in lines) {
+        final fit = _fitFontSize(line, _headerStyle, maxWidth);
+        if (fit < fontSize) fontSize = fit;
+      }
+      final candidate = _layout(lines, fontSize);
+      if (candidate.height > maxBlock) return;
+      if (best == null ||
+          candidate.fontSize > best!.fontSize ||
+          (candidate.fontSize == best!.fontSize && candidate.widestLine < best!.widestLine)) {
+        best = candidate;
+      }
+    }
+
+    void split(int from, int linesLeft, List<String> acc) {
+      if (linesLeft == 1) {
+        consider([...acc, words.sublist(from).join(' ')]);
+        return;
+      }
+      for (var end = from + 1; end <= words.length - linesLeft + 1; end++) {
+        acc.add(words.sublist(from, end).join(' '));
+        split(end, linesLeft - 1, acc);
+        acc.removeLast();
+      }
+    }
+
+    split(0, lineCount, <String>[]);
+    return best;
+  }
+
+  /// A block of [lines] at [fontSize], with the measurements the band needs.
+  static MastheadLayout _layout(List<String> lines, double fontSize) {
+    final style = _headerStyle.copyWith(fontSize: fontSize);
+    var widest = 0.0;
+    for (final line in lines) {
+      final width = _measure(line, style).width;
+      if (width > widest) widest = width;
+    }
+    return MastheadLayout(
+      lines: List<String>.unmodifiable(lines),
+      fontSize: fontSize,
+      lineHeight: fontSize * (_headerStyle.height ?? 1.05),
+      widestLine: widest,
+    );
   }
 
   /// Where the masthead starts inside a band of [bandHeight] dot rows.
@@ -167,9 +274,10 @@ class PreprintBandRenderer {
     return '${at.year}-${two(at.month)}-${two(at.day)} ${two(at.hour)}:${two(at.minute)}';
   }
 
-  /// Font size the masthead uses for [venueName]: the largest size at or below
-  /// the header style's own size that still keeps the whole name on one line.
-  /// A long cafe name is shrunk to fit, never cut off.
+  /// Font size the masthead uses for [venueName] on ONE line: the largest size
+  /// that still keeps the whole name on one line. This is the size short names
+  /// are printed at; see [masthead] for the layout the band actually paints,
+  /// which wraps a name that would have to be printed tiny on one line.
   static double headerFontSize(String venueName) =>
       _fitFontSize(venueLabel(venueName), _headerStyle, headerMaxWidth.toDouble());
 
@@ -179,18 +287,34 @@ class PreprintBandRenderer {
 
   /// The largest size at or below [style]'s own size at which [value] still fits
   /// [maxWidth] on one line.
+  ///
+  /// Measured by bisection rather than by stepping down: a long name is fitted
+  /// many times while the wrapped layouts are compared, and the old descending
+  /// loop stopped at [_minFontSize] without checking that the name still fitted
+  /// at that size, which is how a long cafe name ended up ellipsized. The
+  /// result here is the exact dot size that fits - one dot larger overflows.
   static double _fitFontSize(String value, TextStyle style, double maxWidth) {
     final base = style.fontSize ?? headerBaseFontSize;
-    var fontSize = base;
-    while (fontSize > _minFontSize &&
-        _measure(value, style.copyWith(fontSize: fontSize)).width > maxWidth) {
-      fontSize = (fontSize - 2).clamp(_minFontSize, base);
+    bool fits(double fontSize) =>
+        _measure(value, style.copyWith(fontSize: fontSize)).width <= maxWidth;
+    if (fits(base)) return base;
+    var tooBig = base;
+    var tooSmall = _hardMinimumFontSize;
+    if (!fits(tooSmall)) return tooSmall;
+    while (tooBig - tooSmall > 1) {
+      final middle = ((tooBig + tooSmall) / 2).floorToDouble();
+      if (fits(middle)) {
+        tooSmall = middle;
+      } else {
+        tooBig = middle;
+      }
     }
-    return fontSize;
+    return tooSmall;
   }
 
   /// Lays [value] out on one line, shrunk to fit [maxWidth] and ellipsized only
-  /// when even the smallest size is still too wide.
+  /// when even the hard minimum size is still too wide (used by the maintenance
+  /// slip, whose lines are short fixed strings).
   static TextPainter _fitText(String value, TextStyle style, double maxWidth) {
     final fontSize = _fitFontSize(value, style, maxWidth);
     final natural = _measure(value, style.copyWith(fontSize: fontSize));
@@ -202,6 +326,22 @@ class PreprintBandRenderer {
       maxLines: 1,
       ellipsis: '...',
     )..layout(maxWidth: maxWidth);
+  }
+
+  /// [value] laid out for painting on the band: its natural width when it fits,
+  /// otherwise ellipsized against [headerMaxWidth]. Only a single unbreakable
+  /// word wider than the paper at [_hardMinimumFontSize] can reach the ellipsis;
+  /// a name with spaces is word-wrapped by [masthead] instead.
+  static TextPainter _paintable(String value, TextStyle style) {
+    final natural = _measure(value, style);
+    if (natural.width <= headerMaxWidth) return natural;
+    return TextPainter(
+      text: TextSpan(text: value, style: style),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      ellipsis: '...',
+    )..layout(maxWidth: headerMaxWidth.toDouble());
   }
 
   /// Natural, unconstrained single-line layout of [value].
@@ -238,4 +378,33 @@ class PreprintBandRenderer {
       picture.dispose();
     }
   }
+}
+
+/// A cafe name laid out for the pre-printed band: one or a few lines at a single
+/// font size, measured in printer dots so what is drawn is what is printed.
+class MastheadLayout {
+  const MastheadLayout({
+    required this.lines,
+    required this.fontSize,
+    required this.lineHeight,
+    required this.widestLine,
+  });
+
+  /// The name, one entry per printed line. Words are never split between lines.
+  final List<String> lines;
+
+  /// Font size shared by every line, in printer dots.
+  final double fontSize;
+
+  /// Distance from one line's top to the next, in dot rows.
+  final double lineHeight;
+
+  /// Width of the widest line, in printer dots.
+  final double widestLine;
+
+  /// Total height of the block, in dot rows.
+  double get height => lineHeight * lines.length;
+
+  /// The whole name as one string, for tests and previews.
+  String get text => lines.join(' ');
 }

@@ -81,10 +81,16 @@ class _TierCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(tier.subtitle, textAlign: TextAlign.center),
               const SizedBox(height: 18),
+              // What the session includes, not what it costs: customers pick a
+              // layout without the price being on screen. The amount is still
+              // charged through PayMongo (see PaymentScreen) and still reported
+              // in Admin, so nothing about billing changes.
               Chip(
                 backgroundColor: SkyeColors.amber,
-                label: Text(tier.priceLabel,
-                    style: const TextStyle(color: SkyeColors.ink, fontSize: 22, fontWeight: FontWeight.w900)),
+                label: Text(
+                  tier.shotCount == 1 ? '1 photo' : '${tier.shotCount} photos',
+                  style: const TextStyle(color: SkyeColors.ink, fontSize: 22, fontWeight: FontWeight.w900),
+                ),
               ),
             ],
           ),

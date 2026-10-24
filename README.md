@@ -13,6 +13,14 @@ internet access. For unattended use, a small dedicated router is more reliable
 than an Android hotspot. The Digital Copy screen reports when no reachable LAN
 address is available.
 
+## Pricing on the customer screen
+
+The customer flow never shows a price. The layout cards say what a session
+includes ("1 photo", "3 photos", "4 photos") and the payment screen is titled
+**Complete your payment**; the amount lives only in the PayMongo payment intent
+and in Admin reporting, where the tiers still carry 20/30/50 PHP. Billing is
+unchanged: `amountCentavos` is still sent for the selected tier.
+
 ## Photo frames
 
 The editor's **Border** button wraps the finished photo(s) in a single printed
@@ -52,13 +60,23 @@ It ejects the paper that was already sitting in the gap and loads the cafe name
 for the strip that follows. The same maintenance print can be run on demand from
 **Admin → Pre-printed cafe name** after loading a fresh roll.
 
-The band prints the cafe name and nothing else, on one line, centred in the
-strip's head. `PreprintBandRenderer.mastheadTop` divides the band **plus the
-composition's own 18-dot top padding** into equal margins above and below the
-name; `headerMarginRatio` biases that split (1.0 = exactly equal, 1.15 = a hair
-more air above, the default), so a typical venue name lands about 19 mm below the
-cut edge and about 16 mm above the first photo. A name too wide for the paper is
-shrunk (never split or cut off), down to `minimumHeaderFontSize`.
+The band prints the cafe name and nothing else, centred in the strip's head.
+`PreprintBandRenderer.mastheadTop` divides the band **plus the composition's own
+18-dot top padding** into equal margins above and below the name;
+`headerMarginRatio` biases that split (1.0 = exactly equal, 1.15 = a hair more
+air above, the default), so a typical venue name lands about 19 mm below the cut
+edge and about 16 mm above the first photo.
+
+A long cafe name is **never cut off**: nothing printed on the band can be
+corrected afterwards, so a name too wide for the paper is first shrunk to fit,
+and if it would have to be printed below `minimumSingleLineFontSize` (32 of the
+64-dot base size) it is word-wrapped over up to `headerMaxLines` (3) lines
+instead, sharing one font size, with the margins re-balanced around the block.
+It is never split mid-word and never ellipsized. Real measurements with Poppins:
+"The Weekend Gathering" stays on one line at 35 dots, "Weekend Gathering" at
+43, and a 56-character name becomes three lines at 37. Only a single
+unbreakable word (no spaces at all) can be shrunk below 24, and it is still
+printed whole.
 
 `PreprintBandRenderer.gapDots` (320 rows = 40 mm at 8 dots/mm) is the
 printhead-to-cutter distance, and therefore the height and position of the

@@ -52,7 +52,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       final payment = await _paymongo.createQrPhPayment(
         amountCentavos: tier.price * 100,
-        description: 'SkyeLoop ${tier.title} (${tier.priceLabel})',
+        description: 'SkyeLoop ${tier.title}',
       );
       if (!mounted) return;
       setState(() {
@@ -118,7 +118,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final tier = app.session!.tier;
+    // The tier is deliberately not read here: the amount it carries goes to
+    // PayMongo and Admin, never to the customer-facing screen.
     final testMode = app.config.paymentTestMode;
 
     final subtitle = testMode
@@ -130,7 +131,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       canPop: false,
       child: KioskShell(
         header: ScreenHeading(
-          title: 'Pay ${tier.priceLabel}',
+          // The amount is deliberately not shown to the customer (the QR Ph
+          // code still carries it, and the paying app displays it). Admin keeps
+          // the prices for reporting.
+          title: 'Complete your payment',
           subtitle: subtitle,
         ),
         footer: const BackToStartButton(),
